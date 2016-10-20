@@ -1,5 +1,5 @@
-# VPfits
-Voigt Profile fitting with MCMC
+# VAMP
+Voigt Automatic MCMC Profiles
 
 ## Requirements
 
