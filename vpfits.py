@@ -85,7 +85,7 @@ class VPfit():
             self.estimated_profiles.append(profile)
 
 
-    def plot(self, wavelength_array, flux_array, clouds, n, onesigmaerror = 0.02):
+    def plot(self, wavelength_array, flux_array, clouds, n, onesigmaerror = 0.02, start_pix=None, end_pix=None):
         """
         Plot the fitted absorption profile
 
@@ -97,6 +97,11 @@ class VPfit():
             onesigmaerror (float): noise on profile plot
         """
 
+        if not start_pix:
+            start_pix = 0
+        if not end_pix:
+            end_pix = len(wavelength_array)
+
         f, (ax1, ax2, ax3) = pylab.subplots(3, sharex=True, sharey=False, figsize=(10,10))
 
         ax1.plot(wavelength_array, (flux_array - self.total.value) / onesigmaerror)
@@ -107,10 +112,10 @@ class VPfit():
 
         for c in range(len(clouds)):
             if c==0:
-                ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau']),
+                ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
                          color="red", label="Actual", lw=1.5)
             else:
-                ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau']),
+                ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
                          color="red", lw=1.5)
 
 
@@ -180,6 +185,90 @@ class VPfit():
         self.fit_time = str(datetime.datetime.now() - starttime)
         print "\nTook:", self.fit_time, " to finish."
 
+
+    def compute_detection_regions(self, wavelengths, fluxes, noise, buffer=3, min_region_width=5):
+        """
+        Finds detection regions above some detection threshold and minimum width.
+
+        Args:
+            wavelengths (numpy array)
+            fluxes (numpy array): flux values at each wavelength
+            noise (numpy array): noise value at each wavelength
+            buffer (int): buffer before combining close regions (pixels)
+            min_region_width (int): minimum width of a detection region (pixels)
+
+        Returns:
+            regions (numpy array): contains subarrays with start and end wavelengths
+        """
+
+        N_sigma = 4.0  # Detection threshold
+
+        num_pixels = len(wavelengths)
+        min_pix = 1
+        max_pix = num_pixels - 1
+
+        std_min = 2  # Range of standard deviations for Gaussian convolution
+        std_max = 11
+
+        flux_ews = [0] * num_pixels
+        noise_ews = [0] * num_pixels
+        det_ratio = [-float('inf')] * num_pixels
+
+        # Convolve varying-width Gaussians with equivalent width of flux and noise
+        for std in range(std_min, std_max):
+
+            for i in range(min_pix, max_pix):
+                flux_dec = 1.0 - fluxes[i]
+                if flux_dec < noise[i]:
+                    flux_dec = 0.0
+                flux_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * flux_dec
+                noise_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * noise[i]
+
+            flux_ews[0] = 0
+            flux_ews[max_pix] = 0
+            noise_ews[0] = 0
+            noise_ews[max_pix] = 0
+
+            xarr = np.array([p - (num_pixels-1)/2.0 for p in range(num_pixels)])
+            gaussian = self.GaussFunction(xarr, 1.0, 0.0, std)
+
+            flux_func = np.convolve(flux_ews, gaussian, 'same')
+            noise_func = np.convolve(np.square(noise_ews), np.square(gaussian), 'same')
+
+            # Select highest detection ratio of the Gaussians
+            for i in range(min_pix, max_pix):
+                noise_func[i] = 1.0 / np.sqrt(noise_func[i])
+                if flux_func[i] * noise_func[i] > det_ratio[i]:
+                    det_ratio[i] = flux_func[i] * noise_func[i]
+
+        start = 0
+        end = 0
+        region_endpoints = []
+
+        pixels = [p for p in range(len(wavelengths))]
+
+        # Select regions based on detection ratio at each point, combining nearby regions
+        combine = False
+        for i in range(len(pixels)):
+            if det_ratio[i] > N_sigma and start == 0:
+                start = pixels[i]
+                if end != 0 and pixels[i] < end + buffer:
+                    combine = True
+            if det_ratio[i] < N_sigma and start != 0:
+                if pixels[i] - start > min_region_width:
+                    end = pixels[i]
+                    if combine:
+                        region_endpoints[-1][1] = end
+                        combine = False
+                    else:
+                        region_endpoints.append([start, end])
+                start = 0
+
+        regions = []
+        for (start, end) in region_endpoints:
+            regions.append([wavelengths[start], wavelengths[end]])
+
+        return np.array(regions)
 
 
 def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02):
