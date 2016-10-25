@@ -287,7 +287,6 @@ def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_w
     return np.array(regions)
 
 
-
 def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02):
     """
     Generate a mock absorption profile.
