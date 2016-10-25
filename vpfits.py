@@ -30,18 +30,6 @@ class VPfit():
         """
         self.std_deviation = 1./mc.Uniform("sd", 0, 1)**2
 
-    def GaussFunction(self, wavelength_array, amplitude, centroid, sigma):
-        """
-        Gaussian.
-
-        Args:
-            wavelength_array (numpy array)
-            amplitude (float)
-            centroid (float): must be between the limits of wavelength_array
-            sigma (float)
-        """
-        return amplitude * np.exp(-0.5 * ((wavelength_array - centroid) / sigma)**2)
-
     def Absorption(self, arr):
         """
         Convert optical depth in to absoprtion profile
@@ -80,7 +68,7 @@ class VPfit():
                         centroid=self.estimated_variables[component]['centroid'],
                         sigma=self.estimated_variables[component]['sigma'],
                         height=self.estimated_variables[component]['height']):
-                return self.GaussFunction( x, height, centroid, sigma )
+                return GaussFunction( x, height, centroid, sigma )
 
             self.estimated_profiles.append(profile)
 
@@ -186,89 +174,118 @@ class VPfit():
         print "\nTook:", self.fit_time, " to finish."
 
 
-    def compute_detection_regions(self, wavelengths, fluxes, noise, buffer=3, min_region_width=5):
-        """
-        Finds detection regions above some detection threshold and minimum width.
+def GaussFunction(wavelength_array, amplitude, centroid, sigma):
+    """
+    Gaussian.
 
-        Args:
-            wavelengths (numpy array)
-            fluxes (numpy array): flux values at each wavelength
-            noise (numpy array): noise value at each wavelength
-            buffer (int): buffer before combining close regions (pixels)
-            min_region_width (int): minimum width of a detection region (pixels)
+    Args:
+        wavelength_array (numpy array)
+        amplitude (float)
+        centroid (float): must be between the limits of wavelength_array
+        sigma (float)
+    """
+    return amplitude * np.exp(-0.5 * ((wavelength_array - centroid) / sigma) ** 2)
 
-        Returns:
-            regions (numpy array): contains subarrays with start and end wavelengths
-        """
 
-        N_sigma = 4.0  # Detection threshold
+def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_width=5):
+    """
+    Finds detection regions above some detection threshold and minimum width.
 
-        num_pixels = len(wavelengths)
-        min_pix = 1
-        max_pix = num_pixels - 1
+    Args:
+        wavelengths (numpy array)
+        fluxes (numpy array): flux values at each wavelength
+        noise (numpy array): noise value at each wavelength
+        buffer (int): buffer before combining close regions (pixels)
+        min_region_width (int): minimum width of a detection region (pixels)
 
-        std_min = 2  # Range of standard deviations for Gaussian convolution
-        std_max = 11
+    Returns:
+        regions (numpy array): contains subarrays with start and end wavelengths
+    """
 
-        flux_ews = [0] * num_pixels
-        noise_ews = [0] * num_pixels
-        det_ratio = [-float('inf')] * num_pixels
+    N_sigma = 4.0  # Detection threshold
 
-        # Convolve varying-width Gaussians with equivalent width of flux and noise
-        for std in range(std_min, std_max):
+    num_pixels = len(wavelengths)
+    min_pix = 1
+    max_pix = num_pixels - 1
 
-            for i in range(min_pix, max_pix):
-                flux_dec = 1.0 - fluxes[i]
-                if flux_dec < noise[i]:
-                    flux_dec = 0.0
-                flux_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * flux_dec
-                noise_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * noise[i]
+    std_min = 2  # Range of standard deviations for Gaussian convolution
+    std_max = 11
 
-            flux_ews[0] = 0
-            flux_ews[max_pix] = 0
-            noise_ews[0] = 0
-            noise_ews[max_pix] = 0
+    flux_ews = [0] * num_pixels
+    noise_ews = [0] * num_pixels
+    det_ratio = [-float('inf')] * num_pixels
 
-            xarr = np.array([p - (num_pixels-1)/2.0 for p in range(num_pixels)])
-            gaussian = self.GaussFunction(xarr, 1.0, 0.0, std)
+    # Convolve varying-width Gaussians with equivalent width of flux and noise
+    for std in range(std_min, std_max):
 
-            flux_func = np.convolve(flux_ews, gaussian, 'same')
-            noise_func = np.convolve(np.square(noise_ews), np.square(gaussian), 'same')
+        for i in range(min_pix, max_pix):
+            flux_dec = 1.0 - fluxes[i]
+            if flux_dec < noise[i]:
+                flux_dec = 0.0
+            flux_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * flux_dec
+            noise_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * noise[i]
 
-            # Select highest detection ratio of the Gaussians
-            for i in range(min_pix, max_pix):
-                noise_func[i] = 1.0 / np.sqrt(noise_func[i])
-                if flux_func[i] * noise_func[i] > det_ratio[i]:
-                    det_ratio[i] = flux_func[i] * noise_func[i]
+        flux_ews[0] = 0
+        flux_ews[max_pix] = 0
+        noise_ews[0] = 0
+        noise_ews[max_pix] = 0
 
-        start = 0
-        end = 0
-        region_endpoints = []
+        xarr = np.array([p - (num_pixels-1)/2.0 for p in range(num_pixels)])
+        gaussian = GaussFunction(xarr, 1.0, 0.0, std)
 
-        pixels = [p for p in range(len(wavelengths))]
+        flux_func = np.convolve(flux_ews, gaussian, 'same')
+        noise_func = np.convolve(np.square(noise_ews), np.square(gaussian), 'same')
 
-        # Select regions based on detection ratio at each point, combining nearby regions
-        combine = False
-        for i in range(len(pixels)):
-            if det_ratio[i] > N_sigma and start == 0:
-                start = pixels[i]
-                if end != 0 and pixels[i] < end + buffer:
-                    combine = True
-            if det_ratio[i] < N_sigma and start != 0:
-                if pixels[i] - start > min_region_width:
-                    end = pixels[i]
-                    if combine:
-                        region_endpoints[-1][1] = end
-                        combine = False
-                    else:
-                        region_endpoints.append([start, end])
-                start = 0
+        # Select highest detection ratio of the Gaussians
+        for i in range(min_pix, max_pix):
+            noise_func[i] = 1.0 / np.sqrt(noise_func[i])
+            if flux_func[i] * noise_func[i] > det_ratio[i]:
+                det_ratio[i] = flux_func[i] * noise_func[i]
 
-        regions = []
-        for (start, end) in region_endpoints:
+    pixels = [p for p in range(len(wavelengths))]
+
+    # Select regions based on detection ratio at each point, combining nearby regions
+    start = 0
+    region_endpoints = []
+    for i in range(len(pixels)):
+        if start == 0 and det_ratio[i] > N_sigma and fluxes[i] < 1.0:
+            start = pixels[i]
+        elif start != 0 and det_ratio[i] < N_sigma:
+            if pixels[i] - start > min_region_width:
+                end = pixels[i]
+                region_endpoints.append([start, end])
+            start = 0
+    print(region_endpoints)
+
+    # Expand edges of region until flux goes above 1
+    regions_expanded = []
+    for reg in region_endpoints:
+        start = reg[0]
+        i = start
+        while i > 0 and fluxes[i] < 1.0:
+            i -= 1
+        start_new = i
+        end = reg[1]
+        j = end
+        while j < (len(fluxes)-1) and fluxes[j] < 1.0:
+            j += 1
+        end_new = j
+        regions_expanded.append([start_new, end_new])
+    print(regions_expanded)
+
+    # Combine overlapping regions and convert to wavelengths
+    regions = []
+    for i in range(len(regions_expanded)):
+        start = regions_expanded[i][0]
+        end = regions_expanded[i][1]
+        if i==len(regions_expanded)-1 or end < regions_expanded[i+1][0]:
             regions.append([wavelengths[start], wavelengths[end]])
+        else:
+            next_end = regions_expanded[i+1][1]
+            regions.append([wavelengths[start], wavelengths[next_end]])
 
-        return np.array(regions)
+    return np.array(regions)
+
 
 
 def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02):
@@ -302,9 +319,8 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, 
                                 'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
                                 'sigma': random.uniform(0,2), 'tau':[]}, ignore_index=True)
 
-        clouds.set_value(cloud, 'tau', vpfit.GaussFunction(wavelength_array, clouds.ix[cloud]['amplitude'],
+        clouds.set_value(cloud, 'tau', GaussFunction(wavelength_array, clouds.ix[cloud]['amplitude'],
                                          clouds.ix[cloud]['centroid'], clouds.ix[cloud]['sigma']))
-
 
 
     if plot:
