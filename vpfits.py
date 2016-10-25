@@ -32,13 +32,74 @@ class VPfit():
 
     def Absorption(self, arr):
         """
-        Convert optical depth in to absoprtion profile
+        Convert optical depth in to absorption profile
 
         Args:
             arr (numpy array): array of optical depth values
         """
 
         return np.exp(-arr)
+
+
+    def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
+        """
+        Plot the fitted absorption profile
+
+        Args:
+            wavelength_array (numpy array):
+            flux_array (numpy array): original flux array, same length as wavelength_array
+            clouds (pandas dataframe): dataframe containing details on each absorption feature
+            n (int): number of *fitted* absorption profiles
+            onesigmaerror (float): noise on profile plot
+        """
+
+        if not start_pix:
+            start_pix = 0
+        if not end_pix:
+            end_pix = len(wavelength_array)
+
+        f, (ax1, ax2, ax3) = pylab.subplots(3, sharex=True, sharey=False, figsize=(10,10))
+
+        ax1.plot(wavelength_array, (flux_array - self.total.value) / onesigmaerror)
+        ax1.hlines(1, wavelength_array[0], wavelength_array[-1], color='red', linestyles='-')
+        ax1.hlines(-1, wavelength_array[0], wavelength_array[-1], color='red', linestyles='-')
+
+        ax2.plot(wavelength_array, flux_array, color='black', linewidth=1.0)
+
+        if clouds is not None:
+            for c in range(len(clouds)):
+                if c==0:
+                    ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
+                             color="red", label="Actual", lw=1.5)
+                else:
+                    ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
+                             color="red", lw=1.5)
+
+
+        for c in range(n):
+            if c==0:
+                ax2.plot(wavelength_array, self.Absorption(self.estimated_profiles[c].value),
+                         color="green", label="Fit")
+            else:
+                ax2.plot(wavelength_array, self.Absorption(self.estimated_profiles[c].value),
+                         color="green")
+
+
+        ax2.legend()
+
+        ax3.plot(wavelength_array, flux_array, label="Measured")
+        ax3.plot(wavelength_array, self.total.value, color='green', label="Fit", linewidth=2.0)
+        ax3.legend()
+
+        f.subplots_adjust(hspace=0)
+
+        ax1.set_title("Fit time: " + self.fit_time)
+        ax1.set_ylabel("Residuals")
+        ax2.set_ylabel("Normalised Flux")
+        ax3.set_ylabel("Normalised Flux")
+        ax3.set_xlabel("$ \lambda (\AA)$")
+
+        pylab.show()
 
     def initialise_components(self, wavelength_array, n, sigma_max = 5):
         """
@@ -68,75 +129,14 @@ class VPfit():
                         centroid=self.estimated_variables[component]['centroid'],
                         sigma=self.estimated_variables[component]['sigma'],
                         height=self.estimated_variables[component]['height']):
-                return GaussFunction( x, height, centroid, sigma )
+                return self.GaussFunction( x, height, centroid, sigma )
 
             self.estimated_profiles.append(profile)
 
 
-    def plot(self, wavelength_array, flux_array, clouds, n, onesigmaerror = 0.02, start_pix=None, end_pix=None):
+    def initialise_model(self, wavelength, flux, n):
         """
-        Plot the fitted absorption profile
-
-        Args:
-            wavelength_array (numpy array):
-            flux_array (numpy array): original flux array, same length as wavelength_array
-            clouds (pandas dataframe): dataframe containing details on each absorption feature
-            n (int): number of *fitted* absorption profiles
-            onesigmaerror (float): noise on profile plot
-        """
-
-        if not start_pix:
-            start_pix = 0
-        if not end_pix:
-            end_pix = len(wavelength_array)
-
-        f, (ax1, ax2, ax3) = pylab.subplots(3, sharex=True, sharey=False, figsize=(10,10))
-
-        ax1.plot(wavelength_array, (flux_array - self.total.value) / onesigmaerror)
-        ax1.hlines(1, wavelength_array[0], wavelength_array[-1], color='red', linestyles='-')
-        ax1.hlines(-1, wavelength_array[0], wavelength_array[-1], color='red', linestyles='-')
-
-        ax2.plot(wavelength_array, flux_array, color='black', linewidth=1.0)
-
-        for c in range(len(clouds)):
-            if c==0:
-                ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
-                         color="red", label="Actual", lw=1.5)
-            else:
-                ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
-                         color="red", lw=1.5)
-
-
-        for c in range(n):
-            if c==0:
-                ax2.plot(wavelength_array, self.Absorption(self.estimated_profiles[c].value),
-                         color="green", label="Fit")
-            else:
-                ax2.plot(wavelength_array, self.Absorption(self.estimated_profiles[c].value),
-                         color="green")
-
-
-        ax2.legend()
-
-        ax3.plot(wavelength_array, flux_array, label="Measured")
-        ax3.plot(wavelength_array, self.total.value, color='green', label="Fit", linewidth=2.0)
-        ax3.legend()
-
-        f.subplots_adjust(hspace=0)
-
-        ax1.set_title("Fit time: " + self.fit_time)
-        ax1.set_ylabel("Residuals")
-        ax2.set_ylabel("Normalised Flux")
-        ax3.set_ylabel("Normalised Flux")
-        ax3.set_xlabel("$ \lambda (\AA)$")
-
-        pylab.show()
-
-
-
-    def fit(self, wavelength, flux, n):
-        """
-        MCMC fit of `n` absorption profiles to a given spectrum
+        Initialise deterministic model of all absorption features.
 
         Args:
             wavelength (numpy array)
@@ -160,16 +160,36 @@ class VPfit():
         self.model = mc.Model([self.estimated_variables[x][y] for x in self.estimated_variables for y in self.estimated_variables[x]])# + [std_deviation])
 
 
-        # Calculate the Maximum A Posteriori (MAP) estimate. Useful to do in advance so as to start the sampling with good initial values
+    def map_estimate(self):
+        """
+        Compute the Maximum A Posteriori estimates for the initialised model
+        """
+
         self.MAP = mc.MAP(self.model)
         self.MAP.fit()
+
+
+    def mcmc_fit(self, iterations=10000, burnin=6000, thinning=2):
+        """
+        MCMC fit of `n` absorption profiles to a given spectrum
+
+        Args:
+            wavelength (numpy array)
+            flux (numpy array): flux values at each wavelength
+            n (int): number of absorption profiles to fit
+        """
+
+        try:
+            getattr(self, 'MAP')
+        except AttributeError:
+            print "\nWARNING: MAP estimate not provided. \nIt is recommended to compute this in advance of running the MCMC so as to start the sampling with good initial values."
 
         # create MCMC object
         self.mcmc = mc.MCMC(self.model)
 
         # fit the model
         starttime=datetime.datetime.now()
-        self.mcmc.sample(iter=10000, burn=6000, thin=2.0)
+        self.mcmc.sample(iter=iterations, burn=burnin, thin=thinning)
         self.fit_time = str(datetime.datetime.now() - starttime)
         print "\nTook:", self.fit_time, " to finish."
 
@@ -285,6 +305,8 @@ def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_w
             regions.append([wavelengths[start], wavelengths[next_end]])
 
     return np.array(regions)
+
+
 
 
 def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02):
