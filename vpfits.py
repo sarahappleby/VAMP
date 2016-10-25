@@ -30,6 +30,20 @@ class VPfit():
         """
         self.std_deviation = 1./mc.Uniform("sd", 0, 1)**2
 
+    @staticmethod
+    def GaussFunction(wavelength_array, amplitude, centroid, sigma):
+        """
+        Gaussian.
+    
+        Args:
+            wavelength_array (numpy array)
+            amplitude (float)
+            centroid (float): must be between the limits of wavelength_array
+            sigma (float)
+        """
+        return amplitude * np.exp(-0.5 * ((wavelength_array - centroid) / sigma) ** 2)
+
+
     def Absorption(self, arr):
         """
         Convert optical depth in to absorption profile
@@ -194,17 +208,7 @@ class VPfit():
         print "\nTook:", self.fit_time, " to finish."
 
 
-def GaussFunction(wavelength_array, amplitude, centroid, sigma):
-    """
-    Gaussian.
 
-    Args:
-        wavelength_array (numpy array)
-        amplitude (float)
-        centroid (float): must be between the limits of wavelength_array
-        sigma (float)
-    """
-    return amplitude * np.exp(-0.5 * ((wavelength_array - centroid) / sigma) ** 2)
 
 
 def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_width=5):
@@ -251,7 +255,7 @@ def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_w
         noise_ews[max_pix] = 0
 
         xarr = np.array([p - (num_pixels-1)/2.0 for p in range(num_pixels)])
-        gaussian = GaussFunction(xarr, 1.0, 0.0, std)
+        gaussian = VPfit.GaussFunction(xarr, 1.0, 0.0, std)
 
         flux_func = np.convolve(flux_ews, gaussian, 'same')
         noise_func = np.convolve(np.square(noise_ews), np.square(gaussian), 'same')
@@ -282,7 +286,7 @@ def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_w
     for reg in region_endpoints:
         start = reg[0]
         i = start
-        while i > 0 and fluxes[i] < 1.0:
+        while i > 0 and VPfit.fluxes[i] < 1.0:
             i -= 1
         start_new = i
         end = reg[1]
@@ -340,7 +344,7 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, 
                                 'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
                                 'sigma': random.uniform(0,2), 'tau':[]}, ignore_index=True)
 
-        clouds.set_value(cloud, 'tau', GaussFunction(wavelength_array, clouds.ix[cloud]['amplitude'],
+        clouds.set_value(cloud, 'tau', VPfit.GaussFunction(wavelength_array, clouds.ix[cloud]['amplitude'],
                                          clouds.ix[cloud]['centroid'], clouds.ix[cloud]['sigma']))
 
 
@@ -378,6 +382,8 @@ if __name__ == "__main__":
     noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
     flux_array = vpfit.Absorption(sum(clouds['tau'])) + noise
 
-    vpfit.fit(wavelength_array, flux_array, 2)
+    vpfit.initialise_model(wavelength_array, flux_array, 2)
+    vpfit.map_estimate()
+    vpfit.mcmc_fit()
 
     vpfit.plot(wavelength_array, flux_array, clouds, n=2)
