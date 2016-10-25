@@ -44,45 +44,13 @@ class VPfit():
 
     def Absorption(self, arr):
         """
-        Convert optical depth in to absoprtion profile
+        Convert optical depth in to absorption profile
 
         Args:
             arr (numpy array): array of optical depth values
         """
 
         return np.exp(-arr)
-
-    def initialise_components(self, wavelength_array, n, sigma_max = 5):
-        """
-        Initialise each fitted component of the model. Each component consists of three variables, height, centroid and sigma. These variables are encapsulated in a deterministic profile variable. The variables are stored in a dictionary, `estimated_variables`, and the profiles in a list, `estimated_profiles`.
-
-        Args:
-            wavelength_array (numpy array)
-            n (int): number of components
-            sigma_max (float): maximum permitted range of fitted sigma values
-        """
-
-        self.estimated_variables = {}
-        self.estimated_profiles = []
-
-        for component in range(n):
-            self.estimated_variables[component] = {}
-
-            self.estimated_variables[component]['height'] = mc.Uniform("est_height_" + str(component), 0, 1)
-
-            self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_" + str(component),
-                                                                         wavelength_array[0], wavelength_array[-1])
-
-            self.estimated_variables[component]['sigma'] = mc.Uniform("est_sigma_" + str(component), 0, sigma_max)
-
-            @mc.deterministic(trace = True)
-            def profile(x=wavelength_array,
-                        centroid=self.estimated_variables[component]['centroid'],
-                        sigma=self.estimated_variables[component]['sigma'],
-                        height=self.estimated_variables[component]['height']):
-                return self.GaussFunction( x, height, centroid, sigma )
-
-            self.estimated_profiles.append(profile)
 
 
     def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
@@ -145,11 +113,42 @@ class VPfit():
 
         pylab.show()
 
-
-
-    def fit(self, wavelength, flux, n):
+    def initialise_components(self, wavelength_array, n, sigma_max = 5):
         """
-        MCMC fit of `n` absorption profiles to a given spectrum
+        Initialise each fitted component of the model. Each component consists of three variables, height, centroid and sigma. These variables are encapsulated in a deterministic profile variable. The variables are stored in a dictionary, `estimated_variables`, and the profiles in a list, `estimated_profiles`.
+
+        Args:
+            wavelength_array (numpy array)
+            n (int): number of components
+            sigma_max (float): maximum permitted range of fitted sigma values
+        """
+
+        self.estimated_variables = {}
+        self.estimated_profiles = []
+
+        for component in range(n):
+            self.estimated_variables[component] = {}
+
+            self.estimated_variables[component]['height'] = mc.Uniform("est_height_" + str(component), 0, 1)
+
+            self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_" + str(component),
+                                                                         wavelength_array[0], wavelength_array[-1])
+
+            self.estimated_variables[component]['sigma'] = mc.Uniform("est_sigma_" + str(component), 0, sigma_max)
+
+            @mc.deterministic(trace = True)
+            def profile(x=wavelength_array,
+                        centroid=self.estimated_variables[component]['centroid'],
+                        sigma=self.estimated_variables[component]['sigma'],
+                        height=self.estimated_variables[component]['height']):
+                return self.GaussFunction( x, height, centroid, sigma )
+
+            self.estimated_profiles.append(profile)
+
+
+    def initialise_model(self, wavelength, flux, n):
+        """
+        Initialise deterministic model of all absorption features.
 
         Args:
             wavelength (numpy array)
@@ -173,16 +172,40 @@ class VPfit():
         self.model = mc.Model([self.estimated_variables[x][y] for x in self.estimated_variables for y in self.estimated_variables[x]])# + [std_deviation])
 
 
-        # Calculate the Maximum A Posteriori (MAP) estimate. Useful to do in advance so as to start the sampling with good initial values
+    def map_estimate(self):
+        """
+        Compute the Maximum A Posteriori estimates for the initialised model
+        """
+
         self.MAP = mc.MAP(self.model)
         self.MAP.fit()
+
+
+    def mcmc_fit(self, iterations=10000, burnin=6000, thinning=2):
+        """
+        MCMC fit of `n` absorption profiles to a given spectrum
+
+        Args:
+            wavelength (numpy array)
+            flux (numpy array): flux values at each wavelength
+            n (int): number of absorption profiles to fit
+        """
+
+        try:
+            getattr(self, 'MAP')
+        except AttributeError:
+            print "\nWARNING: MAP estimate not provided. \nIt is recommended to compute this in adavance of running the MCMC so as to start the sampling with good initial values."
+
+        #if hasattr(self, 'MAP'):
+    #        print "\nMAP estimate not provided. Recommended to compute this in adavance of running MCMC to start the sampling with good initial values."
+
 
         # create MCMC object
         self.mcmc = mc.MCMC(self.model)
 
         # fit the model
         starttime=datetime.datetime.now()
-        self.mcmc.sample(iter=10000, burn=6000, thin=2.0)
+        self.mcmc.sample(iter=iterations, burn=burnin, thin=thinning)
         self.fit_time = str(datetime.datetime.now() - starttime)
         print "\nTook:", self.fit_time, " to finish."
 
@@ -270,6 +293,8 @@ class VPfit():
             regions.append([wavelengths[start], wavelengths[end]])
 
         return np.array(regions)
+
+
 
 
 def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02):
