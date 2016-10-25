@@ -85,7 +85,7 @@ class VPfit():
             self.estimated_profiles.append(profile)
 
 
-    def plot(self, wavelength_array, flux_array, clouds, n, onesigmaerror = 0.02, start_pix=None, end_pix=None):
+    def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
         """
         Plot the fitted absorption profile
 
@@ -110,13 +110,14 @@ class VPfit():
 
         ax2.plot(wavelength_array, flux_array, color='black', linewidth=1.0)
 
-        for c in range(len(clouds)):
-            if c==0:
-                ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
-                         color="red", label="Actual", lw=1.5)
-            else:
-                ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
-                         color="red", lw=1.5)
+        if clouds is not None:
+            for c in range(len(clouds)):
+                if c==0:
+                    ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
+                             color="red", label="Actual", lw=1.5)
+                else:
+                    ax2.plot(wavelength_array, self.Absorption(clouds.ix[c]['tau'][start_pix:end_pix]),
+                             color="red", lw=1.5)
 
 
         for c in range(n):
