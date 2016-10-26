@@ -328,6 +328,7 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
                 regions.append([wavelengths[start], wavelengths[end]])
                 break
 
+    print('Found {} detection regions.'.format(len(regions)))
     return np.array(regions)
 
 
