@@ -127,7 +127,7 @@ class VPfit():
 
     def initialise_components(self, wavelength_array, n, sigma_max = 5):
         """
-        Initialise each fitted component of the model. Each component consists of three variables, height, centroid and sigma. These variables are encapsulated in a deterministic profile variable. The variables are stored in a dictionary, `estimated_variables`, and the profiles in a list, `estimated_profiles`.
+        Initialise each fitted component of the model in optical depth space. Each component consists of three variables, height, centroid and sigma. These variables are encapsulated in a deterministic profile variable. The variables are stored in a dictionary, `estimated_variables`, and the profiles in a list, `estimated_profiles`.
 
         Args:
             wavelength_array (numpy array)
@@ -139,16 +139,25 @@ class VPfit():
         self.estimated_profiles = []
 
         for component in range(n):
+
             self.estimated_variables[component] = {}
 
-            self.estimated_variables[component]['height'] = mc.Uniform("est_height_" + str(component), 0, 1)
+            @mc.stochastic(name='xexp_%d' % component)
+            def xexp(value=0.5):
+                if value < 0:
+                    return -np.inf
+                else:
+                    return np.log(value * np.exp(-value))
+
+            self.estimated_variables[component]['height'] = xexp
+            #self.estimated_variables[component]['height'] = mc.Uniform("est_height_" + str(component), 0, 5)
 
             self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_" + str(component),
                                                                          wavelength_array[0], wavelength_array[-1])
 
             self.estimated_variables[component]['sigma'] = mc.Uniform("est_sigma_" + str(component), 0, sigma_max)
 
-            @mc.deterministic(trace = True)
+            @mc.deterministic(name='component_%d' % component, trace = True)
             def profile(x=wavelength_array,
                         centroid=self.estimated_variables[component]['centroid'],
                         sigma=self.estimated_variables[component]['sigma'],
@@ -160,7 +169,7 @@ class VPfit():
 
     def initialise_model(self, wavelength, flux, n):
         """
-        Initialise deterministic model of all absorption features.
+        Initialise deterministic model of all absorption features, in normalised flux.
 
         Args:
             wavelength (numpy array)
@@ -168,10 +177,11 @@ class VPfit():
             n (int): number of absorption profiles to fit
         """
 
+        # always reinitialise profiles, otherwise starts sampling from previously calculated parameter values.
         self.initialise_components(wavelength, n)
 
-        # deterministic variable for the full profile
-        @mc.deterministic(trace=False)
+        # deterministic variable for the full profile, given in terms of normalised flux
+        @mc.deterministic(name='profile', trace=False)
         def total(profile_sum=self.estimated_profiles):
             return self.Absorption(sum(profile_sum))
 
@@ -182,6 +192,7 @@ class VPfit():
 
         # create model with parameters of all profiles to be fitted
         self.model = mc.Model([self.estimated_variables[x][y] for x in self.estimated_variables for y in self.estimated_variables[x]])# + [std_deviation])
+
 
 
     def map_estimate(self):
@@ -216,7 +227,6 @@ class VPfit():
         self.mcmc.sample(iter=iterations, burn=burnin, thin=thinning)
         self.fit_time = str(datetime.datetime.now() - starttime)
         print "\nTook:", self.fit_time, " to finish."
-
 
 
 
@@ -323,7 +333,7 @@ def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_w
 
 
 
-def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02):
+def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02, saturated=False):
     """
     Generate a mock absorption profile.
 
@@ -350,7 +360,13 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, 
                        'tau': pd.Series([], dtype='object')})
 
     for cloud in range(n):
-        clouds = clouds.append({'cloud': cloud, 'amplitude': random.uniform(0,1),
+
+        if(saturated):
+            max_amplitude = 5
+        else:
+            max_amplitude = 1
+
+        clouds = clouds.append({'cloud': cloud, 'amplitude': random.uniform(0, max_amplitude),
                                 'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
                                 'sigma': random.uniform(0,2), 'tau':[]}, ignore_index=True)
 
