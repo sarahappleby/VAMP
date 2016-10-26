@@ -9,7 +9,6 @@ See `__init__` for example usage.
 
 Todo:
 * Add Voigt profile
-
 """
 
 import random
@@ -21,6 +20,7 @@ import pandas as pd
 import pymc as mc
 
 import matplotlib.pylab as pylab
+
 
 class VPfit():
 
@@ -34,7 +34,7 @@ class VPfit():
     def GaussFunction(wavelength_array, amplitude, centroid, sigma):
         """
         Gaussian.
-    
+
         Args:
             wavelength_array (numpy array)
             amplitude (float)
@@ -53,6 +53,11 @@ class VPfit():
         """
 
         return np.exp(-arr)
+
+
+    @staticmethod
+    def Chisquared(observed, expected):
+        return sum(((observed - expected)**2) / expected)
 
 
     def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
