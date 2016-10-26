@@ -211,7 +211,7 @@ class VPfit():
 
 
 
-def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_width=5):
+def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
     """
     Finds detection regions above some detection threshold and minimum width.
 
@@ -225,6 +225,7 @@ def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_w
     Returns:
         regions (numpy array): contains subarrays with start and end wavelengths
     """
+    print('Computing detection regions...')
 
     N_sigma = 4.0  # Detection threshold
 
@@ -274,19 +275,18 @@ def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_w
     for i in range(len(pixels)):
         if start == 0 and det_ratio[i] > N_sigma and fluxes[i] < 1.0:
             start = pixels[i]
-        elif start != 0 and det_ratio[i] < N_sigma:
+        elif start != 0 and (det_ratio[i] < N_sigma or fluxes[i] > 1.0):
             if pixels[i] - start > min_region_width:
                 end = pixels[i]
                 region_endpoints.append([start, end])
             start = 0
-    print(region_endpoints)
 
     # Expand edges of region until flux goes above 1
     regions_expanded = []
     for reg in region_endpoints:
         start = reg[0]
         i = start
-        while i > 0 and VPfit.fluxes[i] < 1.0:
+        while i > 0 and fluxes[i] < 1.0:
             i -= 1
         start_new = i
         end = reg[1]
@@ -295,18 +295,19 @@ def compute_detection_regions(wavelengths, fluxes, noise, buffer=0, min_region_w
             j += 1
         end_new = j
         regions_expanded.append([start_new, end_new])
-    print(regions_expanded)
 
-    # Combine overlapping regions and convert to wavelengths
+    # Combine overlapping regions and check for detection based on noise value
     regions = []
     for i in range(len(regions_expanded)):
         start = regions_expanded[i][0]
         end = regions_expanded[i][1]
-        if i==len(regions_expanded)-1 or end < regions_expanded[i+1][0]:
-            regions.append([wavelengths[start], wavelengths[end]])
-        else:
-            next_end = regions_expanded[i+1][1]
-            regions.append([wavelengths[start], wavelengths[next_end]])
+        if i<(len(regions_expanded)-1) and end > regions_expanded[i+1][0]:
+            end = regions_expanded[i+1][1]
+        for j in range(start, end):
+            flux_dec = 1.0 - fluxes[j]
+            if flux_dec > abs(noise[j]) * N_sigma:
+                regions.append([wavelengths[start], wavelengths[end]])
+                break
 
     return np.array(regions)
 
