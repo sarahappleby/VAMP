@@ -46,7 +46,7 @@ class VPfit():
 
     def Absorption(self, arr):
         """
-        Convert optical depth in to absorption profile
+        Convert optical depth in to normalised flux profile.
 
         Args:
             arr (numpy array): array of optical depth values
@@ -57,11 +57,26 @@ class VPfit():
 
     @staticmethod
     def Chisquared(observed, expected):
+        """
+        Calculate the chi-squared goodness of fit
+
+        Args:
+            observed (array)
+            expected (array): same shape as observed
+        """
         return sum(((observed - expected)**2) / expected)
 
 
     @staticmethod
     def ReducedChisquared(observed, expected, freedom):
+        """
+        Calculate the reduced chih-squared goodness of fit
+
+        Args:
+            observed (array)
+            expected (array): same shape as observed
+            freedom (int): degrees of freedom
+        """
         return VPfit.Chisquared(observed, expected) / (len(expected) - freedom)
 
 
@@ -150,12 +165,12 @@ class VPfit():
                     return np.log(value * np.exp(-value))
 
             self.estimated_variables[component]['height'] = xexp
-            #self.estimated_variables[component]['height'] = mc.Uniform("est_height_" + str(component), 0, 5)
+            #self.estimated_variables[component]['height'] = mc.Uniform("est_height_%d" % component, 0, 5)
 
-            self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_" + str(component),
+            self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
                                                                          wavelength_array[0], wavelength_array[-1])
 
-            self.estimated_variables[component]['sigma'] = mc.Uniform("est_sigma_" + str(component), 0, sigma_max)
+            self.estimated_variables[component]['sigma'] = mc.Uniform("est_sigma_%d" % component, 0, sigma_max)
 
             @mc.deterministic(name='component_%d' % component, trace = True)
             def profile(x=wavelength_array,
@@ -204,7 +219,7 @@ class VPfit():
         self.MAP.fit()
 
 
-    def mcmc_fit(self, iterations=10000, burnin=6000, thinning=2):
+    def mcmc_fit(self, iterations=10000, burnin=6000, thinning=2, step_method=mc.Metropolis):
         """
         MCMC fit of `n` absorption profiles to a given spectrum
 
@@ -221,6 +236,16 @@ class VPfit():
 
         # create MCMC object
         self.mcmc = mc.MCMC(self.model)
+
+        # change step method
+        if step_method != mc.Metropolis:
+            print "Changing step method for each parameter."
+            for index, item in vpfit.estimated_variables.items():
+                self.mcmc.use_step_method(step_method, item['sigma'])
+                self.mcmc.use_step_method(step_method, item['centroid'])
+                self.mcmc.use_step_method(step_method, item['height'])
+        else:
+            print "Using Metropolis step method for each parameter."
 
         # fit the model
         starttime=datetime.datetime.now()
@@ -330,7 +355,6 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
 
     print('Found {} detection regions.'.format(len(regions)))
     return np.array(regions)
-
 
 
 
