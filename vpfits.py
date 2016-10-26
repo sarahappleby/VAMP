@@ -51,7 +51,6 @@ class VPfit():
         Args:
             arr (numpy array): array of optical depth values
         """
-
         return np.exp(-arr)
 
 
@@ -315,8 +314,10 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
         end_new = j
         regions_expanded.append([start_new, end_new])
 
-    # Combine overlapping regions and check for detection based on noise value
+    # Combine overlapping regions, check for detection based on noise value
+    # and extend each region again by a buffer
     regions = []
+    buffer = 3
     for i in range(len(regions_expanded)):
         start = regions_expanded[i][0]
         end = regions_expanded[i][1]
@@ -325,6 +326,10 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
         for j in range(start, end):
             flux_dec = 1.0 - fluxes[j]
             if flux_dec > abs(noise[j]) * N_sigma:
+                if start >= buffer:
+                    start -= buffer
+                if end < len(wavelengths) - buffer:
+                    end += buffer
                 regions.append([wavelengths[start], wavelengths[end]])
                 break
 
