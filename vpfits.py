@@ -60,6 +60,11 @@ class VPfit():
         return sum(((observed - expected)**2) / expected)
 
 
+    @staticmethod
+    def ReducedChisquared(observed, expected, freedom):
+        return VPfit.Chisquared(observed, expected) / (len(expected) - freedom)
+
+
     def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
         """
         Plot the fitted absorption profile
