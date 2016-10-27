@@ -223,9 +223,10 @@ class VPfit():
         MCMC fit of `n` absorption profiles to a given spectrum
 
         Args:
-            wavelength (numpy array)
-            flux (numpy array): flux values at each wavelength
-            n (int): number of absorption profiles to fit
+            iterations (int): How long to sample the MCMC for
+            burnin (int): How many iterations to ignore from the start of the chain
+            thinning (int): How many iterations to ignore each tally
+            step_method (PyMC steo method object)
         """
 
         try:
@@ -239,7 +240,7 @@ class VPfit():
         # change step method
         if step_method != mc.Metropolis:
             print "Changing step method for each parameter."
-            for index, item in vpfit.estimated_variables.items():
+            for index, item in self.estimated_variables.items():
                 self.mcmc.use_step_method(step_method, item['sigma'])
                 self.mcmc.use_step_method(step_method, item['centroid'])
                 self.mcmc.use_step_method(step_method, item['height'])
@@ -251,6 +252,7 @@ class VPfit():
         self.mcmc.sample(iter=iterations, burn=burnin, thin=thinning)
         self.fit_time = str(datetime.datetime.now() - starttime)
         print "\nTook:", self.fit_time, " to finish."
+
 
 
 
