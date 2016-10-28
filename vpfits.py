@@ -21,6 +21,10 @@ import pymc as mc
 
 import matplotlib.pylab as pylab
 
+# Voigt modules
+from scipy.special import wofz
+from astropy.modeling.models import Voigt1D
+
 
 class VPfit():
 
@@ -30,18 +34,41 @@ class VPfit():
         """
         self.std_deviation = 1./mc.Uniform("sd", 0, 1)**2
 
+
     @staticmethod
-    def GaussFunction(wavelength_array, amplitude, centroid, sigma):
+    def GaussFunction(x, amplitude, centroid, sigma):
         """
         Gaussian.
 
         Args:
-            wavelength_array (numpy array)
+            x (numpy array): wavelength array
             amplitude (float)
             centroid (float): must be between the limits of wavelength_array
             sigma (float)
         """
-        return amplitude * np.exp(-0.5 * ((wavelength_array - centroid) / sigma) ** 2)
+        return amplitude * np.exp(-0.5 * ((x - centroid) / sigma) ** 2)
+
+
+    @staticmethod
+    def VoigtFunction(x, centroid, amplitude, L_fwhm, G_fwhm):
+        """
+        Return the Voigt line shape at x with Lorentzian component HWHM gamma
+        and Gaussian component HWHM alpha.
+
+        Source: http://scipython.com/book/chapter-8-scipy/examples/the-voigt-profile/
+
+        Args:
+            x (numpy array): wavelength array
+            centroid (float): center of profile
+            alpha (float): Gaussian HWHM
+            gamma (float): Lorentzian HWHM
+        """
+
+        #sigma = alpha / np.sqrt(2 * np.log(2))
+        #return np.real(wofz((x - centroid + 1j*gamma)/sigma/np.sqrt(2))) / sigma / np.sqrt(2*np.pi)
+
+        v = Voigt1D(x_0=centroid, amplitude_L=amplitude, fwhm_L=L_fwhm, fwhm_G=G_fwhm)
+        return v(x)
 
 
     def Absorption(self, arr):
@@ -176,12 +203,55 @@ class VPfit():
                         centroid=self.estimated_variables[component]['centroid'],
                         sigma=self.estimated_variables[component]['sigma'],
                         height=self.estimated_variables[component]['height']):
-                return self.GaussFunction( x, height, centroid, sigma )
+
+                return self.GaussFunction(x, height, centroid, sigma )
 
             self.estimated_profiles.append(profile)
 
 
-    def initialise_model(self, wavelength, flux, n):
+    def initialise_voigt_profiles(self, wavelength_array, n, sigma_max = 5):
+        """
+        Args:
+            wavelength_array (numpy array)
+            n (int): number of components
+            sigma_max (float): maximum permitted range of fitted sigma values
+        """
+
+        self.estimated_variables = {}
+        self.estimated_profiles = []
+
+        for component in range(n):
+
+            self.estimated_variables[component] = {}
+
+            @mc.stochastic(name='xexp_%d' % component)
+            def xexp(value=0.5):
+                if value < 0:
+                    return -np.inf
+                else:
+                    return np.log(value * np.exp(-value))
+
+            self.estimated_variables[component]['amplitude'] = xexp
+
+            self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
+                                                                         wavelength_array[0], wavelength_array[-1])
+
+            self.estimated_variables[component]['L'] = mc.Uniform("est_L_%d" % component, 0, sigma_max)
+            self.estimated_variables[component]['G'] = mc.Uniform("est_G_%d" % component, 0, sigma_max)
+
+            @mc.deterministic(name='component_%d' % component, trace = True)
+            def profile(x=wavelength_array,
+                        centroid=self.estimated_variables[component]['centroid'],
+                        amplitude=self.estimated_variables[component]['amplitude'],
+                        L=self.estimated_variables[component]['L'],
+                        G=self.estimated_variables[component]['G']):
+                return self.VoigtFunction(x, centroid, amplitude, L, G)
+
+            self.estimated_profiles.append(profile)
+
+
+
+    def initialise_model(self, wavelength, flux, n, voigt=False):
         """
         Initialise deterministic model of all absorption features, in normalised flux.
 
@@ -192,7 +262,12 @@ class VPfit():
         """
 
         # always reinitialise profiles, otherwise starts sampling from previously calculated parameter values.
-        self.initialise_components(wavelength, n)
+        if(voigt):
+            print "Initialising Voigt profile components."
+            self.initialise_voigt_profiles(wavelength, n)
+        else:
+            print "Initialising Gaussian profile components."
+            self.initialise_components(wavelength, n)
 
         # deterministic variable for the full profile, given in terms of normalised flux
         @mc.deterministic(name='profile', trace=False)
@@ -365,7 +440,7 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
 
 
 
-def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02, saturated=False):
+def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02, saturated=False, voigt=False):
     """
     Generate a mock absorption profile.
 
@@ -398,12 +473,21 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, 
         else:
             max_amplitude = 1
 
-        clouds = clouds.append({'cloud': cloud, 'amplitude': random.uniform(0, max_amplitude),
-                                'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
-                                'sigma': random.uniform(0,2), 'tau':[]}, ignore_index=True)
+        if(voigt):
+            clouds = clouds.append({'cloud': cloud, 'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
+                                    'amplitude': random.uniform(0, max_amplitude),
+                                    'L': random.uniform(0,2), 'G': random.uniform(0,2), 'tau':[]}, ignore_index=True)
 
-        clouds.set_value(cloud, 'tau', VPfit.GaussFunction(wavelength_array, clouds.ix[cloud]['amplitude'],
-                                         clouds.ix[cloud]['centroid'], clouds.ix[cloud]['sigma']))
+            clouds.set_value(cloud, 'tau', VPfit.VoigtFunction(wavelength_array, clouds.ix[cloud]['centroid'],
+                                            clouds.ix[cloud]['amplitude'], clouds.ix[cloud]['L'], clouds.ix[cloud]['G']))
+
+        else:
+            clouds = clouds.append({'cloud': cloud, 'amplitude': random.uniform(0, max_amplitude),
+                                    'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
+                                    'sigma': random.uniform(0,2), 'tau':[]}, ignore_index=True)
+
+            clouds.set_value(cloud, 'tau', VPfit.GaussFunction(wavelength_array, clouds.ix[cloud]['amplitude'],
+                                             clouds.ix[cloud]['centroid'], clouds.ix[cloud]['sigma']))
 
 
     if plot:
