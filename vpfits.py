@@ -25,6 +25,9 @@ import matplotlib.pylab as pylab
 from scipy.special import wofz
 from astropy.modeling.models import Voigt1D
 
+# peak finding modules
+from scipy.signal import find_peaks_cwt
+from scipy.signal import savgol_filter
 
 class VPfit():
 
@@ -82,7 +85,7 @@ class VPfit():
 
 
     @staticmethod
-    def Chisquared(observed, expected):
+    def Chisquared(observed, expected, noise):
         """
         Calculate the chi-squared goodness of fit
 
@@ -90,11 +93,11 @@ class VPfit():
             observed (array)
             expected (array): same shape as observed
         """
-        return sum(((observed - expected)**2) / expected)
+        return sum( ((observed - expected) /  noise)**2 )
 
 
     @staticmethod
-    def ReducedChisquared(observed, expected, freedom):
+    def ReducedChisquared(observed, expected, noise, freedom):
         """
         Calculate the reduced chih-squared goodness of fit
 
@@ -103,7 +106,7 @@ class VPfit():
             expected (array): same shape as observed
             freedom (int): degrees of freedom
         """
-        return VPfit.Chisquared(observed, expected) / (len(expected) - freedom)
+        return VPfit.Chisquared(observed, expected, noise) / (len(expected) - freedom)
 
 
     def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
@@ -276,12 +279,11 @@ class VPfit():
 
         self.total = total
 
-        # represent full profile as a normal
+        # represent full profile as a normal distribution
         self.profile = mc.Normal("obs", self.total, self.std_deviation, value=flux, observed=True)
 
         # create model with parameters of all profiles to be fitted
         self.model = mc.Model([self.estimated_variables[x][y] for x in self.estimated_variables for y in self.estimated_variables[x]])# + [std_deviation])
-
 
 
     def map_estimate(self):
@@ -439,8 +441,25 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
     return np.array(regions)
 
 
+def find_local_minima(f_array, window=101):
+    """
+    Find the local minima of an absorption profile.
 
-def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3, plot=True, onesigmaerror = 0.02, saturated=False, voigt=False):
+    Args:
+        f_array: flux array
+        window: smoothing window, pixels
+    Returns:
+        indices of local minima in flux_array
+    """
+
+    # smooth flux profile
+    smoothed_flux = savgol_filter(f_array, window, 1)
+
+    return find_peaks_cwt(smoothed_flux * -1, np.array([window/5]))
+
+
+def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
+                    plot=True, onesigmaerror = 0.02, saturated=False, voigt=False):
     """
     Generate a mock absorption profile.
 
