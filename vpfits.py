@@ -259,12 +259,11 @@ class VPfit():
 
             self.estimated_variables[component]['amplitude'] = xexp
 
-            if (component < len(local_minima)):
-                # use minima location as center of normal prior
+            if (component < len(local_minima)):    # use minima location as center of normal prior
                 self.estimated_variables[component]['centroid'] = mc.Normal("est_centroid_%d" % component,
                         wavelength_array[local_minima[component]], (wavelength_array[-1] - wavelength_array[0]) / 2)
-            else:
-                # use a flat prior for subsequent components
+
+            else:    # use a flat prior for subsequent components
                 self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
                                                             wavelength_array[0], wavelength_array[-1])
 
