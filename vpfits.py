@@ -29,6 +29,7 @@ from astropy.modeling.models import Voigt1D
 from scipy.signal import find_peaks_cwt
 from scipy.signal import savgol_filter
 
+
 class VPfit():
 
     def __init__(self):
@@ -169,6 +170,25 @@ class VPfit():
 
         pylab.show()
 
+
+    def find_local_minima(self, f_array, window=101):
+        """
+        Find the local minima of an absorption profile.
+
+        Args:
+            f_array: flux array
+            window: smoothing window, pixels
+        Returns:
+            indices of local minima in flux_array
+        """
+
+        # smooth flux profile
+        smoothed_flux = savgol_filter(f_array, window, 1)
+
+        return find_peaks_cwt(smoothed_flux * -1, np.array([window/3]))
+
+
+
     def initialise_components(self, wavelength_array, n, sigma_max = 5):
         """
         Initialise each fitted component of the model in optical depth space. Each component consists of three variables, height, centroid and sigma. These variables are encapsulated in a deterministic profile variable. The variables are stored in a dictionary, `estimated_variables`, and the profiles in a list, `estimated_profiles`.
@@ -212,13 +232,16 @@ class VPfit():
             self.estimated_profiles.append(profile)
 
 
-    def initialise_voigt_profiles(self, wavelength_array, n, sigma_max = 5):
+    def initialise_voigt_profiles(self, wavelength_array, n, local_minima=[], sigma_max = 5):
         """
         Args:
             wavelength_array (numpy array)
             n (int): number of components
             sigma_max (float): maximum permitted range of fitted sigma values
         """
+
+        if n < len(local_minima):
+            raise ValueError("Less profiles than number of minima.")
 
         self.estimated_variables = {}
         self.estimated_profiles = []
@@ -236,8 +259,15 @@ class VPfit():
 
             self.estimated_variables[component]['amplitude'] = xexp
 
-            self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
-                                                                         wavelength_array[0], wavelength_array[-1])
+            if (component < len(local_minima)):
+                # use minima location as center of normal prior
+                self.estimated_variables[component]['centroid'] = mc.Normal("est_centroid_%d" % component,
+                        wavelength_array[local_minima[component]], (wavelength_array[-1] - wavelength_array[0]) / 2)
+            else:
+                # use a flat prior for subsequent components
+                self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
+                                                            wavelength_array[0], wavelength_array[-1])
+
 
             self.estimated_variables[component]['L'] = mc.Uniform("est_L_%d" % component, 0, sigma_max)
             self.estimated_variables[component]['G'] = mc.Uniform("est_G_%d" % component, 0, sigma_max)
@@ -254,7 +284,7 @@ class VPfit():
 
 
 
-    def initialise_model(self, wavelength, flux, n, voigt=False):
+    def initialise_model(self, wavelength, flux, n, local_minima=[], voigt=False):
         """
         Initialise deterministic model of all absorption features, in normalised flux.
 
@@ -267,7 +297,7 @@ class VPfit():
         # always reinitialise profiles, otherwise starts sampling from previously calculated parameter values.
         if(voigt):
             print "Initialising Voigt profile components."
-            self.initialise_voigt_profiles(wavelength, n)
+            self.initialise_voigt_profiles(wavelength, n, local_minima)
         else:
             print "Initialising Gaussian profile components."
             self.initialise_components(wavelength, n)
@@ -440,22 +470,6 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
     print('Found {} detection regions.'.format(len(regions)))
     return np.array(regions)
 
-
-def find_local_minima(f_array, window=101):
-    """
-    Find the local minima of an absorption profile.
-
-    Args:
-        f_array: flux array
-        window: smoothing window, pixels
-    Returns:
-        indices of local minima in flux_array
-    """
-
-    # smooth flux profile
-    smoothed_flux = savgol_filter(f_array, window, 1)
-
-    return find_peaks_cwt(smoothed_flux * -1, np.array([window/5]))
 
 
 def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
