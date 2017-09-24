@@ -1,0 +1,9 @@
+numpy
+pandas
+
+pymc
+matplotlib
+
+scipy
+astropy
+
