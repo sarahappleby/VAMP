@@ -8,7 +8,7 @@ The main class containing the fitting functionality is `VPfit`. A mock absorptio
 See `__init__` for example usage.
 
 Todo:
-* Add Voigt profile
+* Add convergence criteria
 """
 
 import random
@@ -110,7 +110,8 @@ class VPfit():
         return VPfit.Chisquared(observed, expected, noise) / (len(expected) - freedom)
 
 
-    def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
+    def plot(self, wavelength_array, flux_array, local_minima = [], features=None,
+             clouds=None, n = 1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
         """
         Plot the fitted absorption profile
 
@@ -154,6 +155,8 @@ class VPfit():
                          color="green")
 
 
+        #ax2.vlines(wavelength_array[local_minima], 0, 1)
+
         ax2.legend()
 
         ax3.plot(wavelength_array, flux_array, label="Measured")
@@ -162,7 +165,7 @@ class VPfit():
 
         f.subplots_adjust(hspace=0)
 
-        ax1.set_title("Fit time: " + self.fit_time)
+        #ax1.set_title("Fit time: " + self.fit_time)
         ax1.set_ylabel("Residuals")
         ax2.set_ylabel("Normalised Flux")
         ax3.set_ylabel("Normalised Flux")
@@ -170,20 +173,18 @@ class VPfit():
 
         pylab.show()
 
-
     def find_local_minima(self, f_array, window=101):
         """
         Find the local minima of an absorption profile.
 
         Args:
-            f_array: flux array
-            window: smoothing window, pixels
+            f_array (numpy array): flux array
+            window (int): smoothing window, pixels
         Returns:
-            indices of local minima in flux_array
+            (list) indices of local minima in flux_array
         """
 
-        # smooth flux profile
-        smoothed_flux = savgol_filter(f_array, window, 1)
+        smoothed_flux = savgol_filter(f_array, window, 1)  # smooth flux profile
 
         return find_peaks_cwt(smoothed_flux * -1, np.array([window/3]))
 
@@ -232,16 +233,20 @@ class VPfit():
             self.estimated_profiles.append(profile)
 
 
-    def initialise_voigt_profiles(self, wavelength_array, n, local_minima=[], sigma_max = 5):
+    def initialise_voigt_profiles(self, wavelength_array, n, local_minima=[], sigma_max = False):
         """
         Args:
             wavelength_array (numpy array)
             n (int): number of components
+            local_minima (list):
             sigma_max (float): maximum permitted range of fitted sigma values
         """
 
         if n < len(local_minima):
             raise ValueError("Less profiles than number of minima.")
+
+        if sigma_max == False:
+            sigma_max = wavelength_array[-1] - wavelength_array[0]
 
         self.estimated_variables = {}
         self.estimated_profiles = []
@@ -257,11 +262,12 @@ class VPfit():
                 else:
                     return np.log(value * np.exp(-value))
 
-            self.estimated_variables[component]['amplitude'] = xexp
+            self.estimated_variables[component]['amplitude'] = mc.Uniform("est_amplitude_%d" % component, 0, 1000) # xexp
+            self.estimated_variables[component]['amplitude'].value = 2
 
             if (component < len(local_minima)):    # use minima location as center of normal prior
                 self.estimated_variables[component]['centroid'] = mc.Normal("est_centroid_%d" % component,
-                        wavelength_array[local_minima[component]], (wavelength_array[-1] - wavelength_array[0]) / 2)
+                    wavelength_array[local_minima[component]], (wavelength_array[-1] - wavelength_array[0]))
 
             else:    # use a flat prior for subsequent components
                 self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
@@ -270,6 +276,10 @@ class VPfit():
 
             self.estimated_variables[component]['L'] = mc.Uniform("est_L_%d" % component, 0, sigma_max)
             self.estimated_variables[component]['G'] = mc.Uniform("est_G_%d" % component, 0, sigma_max)
+
+            self.estimated_variables[component]['L'].value = min(np.abs(self.estimated_variables[component]['centroid'].value - wavelength_array[0]), np.abs(self.estimated_variables[component]['centroid'].value - wavelength_array[-1]))
+
+            self.estimated_variables[component]['G'].value = min(np.abs(self.estimated_variables[component]['centroid'].value - wavelength_array[0]), np.abs(self.estimated_variables[component]['centroid'].value - wavelength_array[-1]))
 
             @mc.deterministic(name='component_%d' % component, trace = True)
             def profile(x=wavelength_array,
@@ -315,13 +325,15 @@ class VPfit():
         self.model = mc.Model([self.estimated_variables[x][y] for x in self.estimated_variables for y in self.estimated_variables[x]])# + [std_deviation])
 
 
-    def map_estimate(self):
+    def map_estimate(self, method='fmin_powell', iterlim=1000, tol=.001):
         """
-        Compute the Maximum A Posteriori estimates for the initialised model
+        Compute the Maximum A Posteriori parameter estimates for the initialised model
         """
 
+        print "Computing the Maximum A Posteriori estimate..."
+
         self.MAP = mc.MAP(self.model)
-        self.MAP.fit()
+        self.MAP.fit(method=method, iterlim=iterlim, tol=tol)
 
 
     def mcmc_fit(self, iterations=10000, burnin=6000, thinning=2, step_method=mc.Metropolis):
