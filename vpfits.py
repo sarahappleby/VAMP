@@ -22,7 +22,7 @@ import pymc as mc
 import matplotlib.pylab as pylab
 
 # Voigt modules
-from scipy.special import wofz
+# from scipy.special import wofz
 from astropy.modeling.models import Voigt1D
 
 # peak finding modules
@@ -332,6 +332,7 @@ class VPfit():
         self.map = mc.MAP(self.model)
         self.map.fit(iterlim=iterations, tol=1e-3)
 
+        
     def mcmc_fit(self, iterations=15000, burnin=100, thinning=15, step_method=mc.AdaptiveMetropolis):
         """
         MCMC fit of `n` absorption profiles to a given spectrum
@@ -352,14 +353,14 @@ class VPfit():
         self.mcmc = mc.MCMC(self.model)
 
         # change step method
-        if step_method != mc.Metropolis:
+        if step_method != mc.AdaptiveMetropolis:
             print "Changing step method for each parameter."
             for index, item in self.estimated_variables.items():
                 self.mcmc.use_step_method(step_method, item['sigma'])
                 self.mcmc.use_step_method(step_method, item['centroid'])
                 self.mcmc.use_step_method(step_method, item['height'])
         else:
-            print "Using Metropolis step method for each parameter."
+            print "Using Adaptive Metropolis step method for each parameter."
 
         # fit the model
         starttime=datetime.datetime.now()
