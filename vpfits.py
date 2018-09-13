@@ -11,6 +11,9 @@ Todo:
 * Add Voigt profile
 """
 
+import matplotlib
+matplotlib.use('agg')
+
 import random
 import datetime
 
@@ -345,7 +348,7 @@ class VPfit():
         """
 
         try:
-            getattr(self, 'MAP')
+            getattr(self, 'map')
         except AttributeError:
             print "\nWARNING: MAP estimate not provided. \nIt is recommended to compute this in advance of running the MCMC so as to start the sampling with good initial values."
 
