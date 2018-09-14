@@ -11,6 +11,9 @@ Todo:
 * Add Voigt profile
 """
 
+import matplotlib
+matplotlib.use('agg')
+
 import random
 import datetime
 
@@ -113,14 +116,15 @@ class VPfit():
         return VPfit.Chisquared(observed, expected, noise) / (np.sum(np.abs(1-observed) > noise*2) - freedom)
 
 
-    def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
+    def plot(self, wavelength_array, flux_array, filename, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
         """
         Plot the fitted absorption profile
 
         Args:
             wavelength_array (numpy array):
             flux_array (numpy array): original flux array, same length as wavelength_array
-            clouds (pandas dataframe): dataframe containing details on each absorption feature
+            filename (string): file name to save plot as
+	    clouds (pandas dataframe): dataframe containing details on each absorption feature
             n (int): number of *fitted* absorption profiles
             onesigmaerror (float): noise on profile plot
         """
@@ -173,7 +177,7 @@ class VPfit():
         ax3.set_ylabel("Normalised Flux")
         ax3.set_xlabel("$ \lambda (\AA)$")
 
-        pylab.show()
+        pylab.savefig(filename)
 
 
     def find_local_minima(self, f_array, window=101):
@@ -345,7 +349,7 @@ class VPfit():
         """
 
         try:
-            getattr(self, 'MAP')
+            getattr(self, 'map')
         except AttributeError:
             print "\nWARNING: MAP estimate not provided. \nIt is recommended to compute this in advance of running the MCMC so as to start the sampling with good initial values."
 
@@ -663,6 +667,8 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
 
 if __name__ == "__main__":
 
+    filename = '/home/sapple/VAMP/vamp_test.png'
+
     vpfit = VPfit()
 
     clouds, wavelength_array = mock_absorption(n=2)
@@ -675,4 +681,4 @@ if __name__ == "__main__":
     vpfit.map_estimate()
     vpfit.mcmc_fit()
 
-    vpfit.plot(wavelength_array, flux_array, clouds, n=2)
+    vpfit.plot(wavelength_array, flux_array, filename, clouds, n=2)
