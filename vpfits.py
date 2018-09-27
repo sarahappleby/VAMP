@@ -12,7 +12,7 @@ Todo:
 """
 
 import matplotlib
-matplotlib.use('agg')
+#matplotlib.use('agg')
 
 import random
 import datetime
@@ -70,7 +70,7 @@ class VPfit():
         Args:
             x (numpy array): wavelength array
             centroid (float): center of profile
-            alpha (float): Gaussian HWHM
+f            alpha (float): Gaussian HWHM
             gamma (float): Lorentzian HWHM
         """
 
@@ -116,14 +116,15 @@ class VPfit():
         return VPfit.Chisquared(observed, expected, noise) / (np.sum(np.abs(1-observed) > noise*2) - freedom)
 
 
-    def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None):
+    def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None, filename=None):
         """
         Plot the fitted absorption profile
 
         Args:
             wavelength_array (numpy array):
             flux_array (numpy array): original flux array, same length as wavelength_array
-            clouds (pandas dataframe): dataframe containing details on each absorption feature
+            filename (string): file name to save plot as
+	    clouds (pandas dataframe): dataframe containing details on each absorption feature
             n (int): number of *fitted* absorption profiles
             onesigmaerror (float): noise on profile plot
         """
@@ -170,13 +171,16 @@ class VPfit():
 
         f.subplots_adjust(hspace=0)
 
-        ax1.set_title("Fit time: " + self.fit_time)
+        if hasattr(self, 'fit_time'): ax1.set_title("Fit time: " + self.fit_time)
         ax1.set_ylabel("Residuals")
         ax2.set_ylabel("Normalised Flux")
         ax3.set_ylabel("Normalised Flux")
         ax3.set_xlabel("$ \lambda (\AA)$")
 
-        pylab.show()
+        if filename:
+            pylab.savefig(filename)
+        else:
+            pylab.show()
 
 
     def find_local_minima(self, f_array, window=101):
@@ -373,51 +377,57 @@ class VPfit():
 
 
 
-
-def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
+# dev: maybe change so input flux, go to tau method for tau
+def compute_detection_regions(wavelengths, fluxes, taus, noise, min_region_width=2, N_sigma=4.0, tau_lim=0.01, extend=False):
     """
     Finds detection regions above some detection threshold and minimum width.
 
     Args:
         wavelengths (numpy array)
-        fluxes (numpy array): flux values at each wavelength
-        noise (numpy array): noise value at each wavelength
+	fluxes (numpy array): flux values at each wavelength
+        taus (numpy array): optical depth values at each wavelength
+	noise (numpy array): noise value at each wavelength 
         min_region_width (int): minimum width of a detection region (pixels)
+	N_sigma (float): detection threshold (std deviations)
+	tau_lim(float): minimum optical depth of a detection region
+	extend (boolean): default is False. Option to extend detected regions untill tau returns to continuum.
 
     Returns:
         regions (numpy array): contains subarrays with start and end wavelengths
     """
     print('Computing detection regions...')
 
-    N_sigma = 4.0  # Detection threshold
-
     num_pixels = len(wavelengths)
+    pixels = range(num_pixels)
     min_pix = 1
     max_pix = num_pixels - 1
 
-    std_min = 2  # Range of standard deviations for Gaussian convolution
-    std_max = 11
-
-    flux_ews = [0] * num_pixels
-    noise_ews = [0] * num_pixels
+    flux_ews = [0.] * num_pixels
+    noise_ews = [0.] * num_pixels
     det_ratio = [-float('inf')] * num_pixels
 
+    # flux_ews has units of wavelength since flux is normalised. so we can use it for optical depth space
+    for i in range(min_pix, max_pix):
+    	flux_dec = 1.0 - fluxes[i]
+	if flux_dec < noise[i]:
+            flux_dec = 0.0
+        flux_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * flux_dec
+        noise_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * noise[i]
+
+    # dev: no need to set end values = 0. since loop does not set end values
+    flux_ews[0] = 0.
+    noise_ews[0] = 0.
+
+    # Range of standard deviations for Gaussian convolution
+    std_min = 2
+    std_max = 11
+
     # Convolve varying-width Gaussians with equivalent width of flux and noise
+    xarr = np.array([p - (num_pixels-1)/2.0 for p in range(num_pixels)])
+    
+    # this part can remain the same, since it uses EW in wavelength units, not flux
     for std in range(std_min, std_max):
 
-        for i in range(min_pix, max_pix):
-            flux_dec = 1.0 - fluxes[i]
-            if flux_dec < noise[i]:
-                flux_dec = 0.0
-            flux_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * flux_dec
-            noise_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * noise[i]
-
-        flux_ews[0] = 0
-        flux_ews[max_pix] = 0
-        noise_ews[0] = 0
-        noise_ews[max_pix] = 0
-
-        xarr = np.array([p - (num_pixels-1)/2.0 for p in range(num_pixels)])
         gaussian = VPfit.GaussFunction(xarr, 1.0, 0.0, std)
 
         flux_func = np.convolve(flux_ews, gaussian, 'same')
@@ -429,34 +439,38 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=5):
             if flux_func[i] * noise_func[i] > det_ratio[i]:
                 det_ratio[i] = flux_func[i] * noise_func[i]
 
-    pixels = [p for p in range(len(wavelengths))]
-
     # Select regions based on detection ratio at each point, combining nearby regions
     start = 0
     region_endpoints = []
-    for i in range(len(pixels)):
-        if start == 0 and det_ratio[i] > N_sigma and fluxes[i] < 1.0:
-            start = pixels[i]
-        elif start != 0 and (det_ratio[i] < N_sigma or fluxes[i] > 1.0):
-            if pixels[i] - start > min_region_width:
-                end = pixels[i]
+    for i in range(num_pixels):
+        if start == 0 and det_ratio[i] > N_sigma and taus[i] > tau_lim:
+            start = i
+        elif start != 0 and (det_ratio[i] < N_sigma or taus[i] < tau_lim):
+            if (i - start) > min_region_width:
+                end = i
                 region_endpoints.append([start, end])
             start = 0
 
-    # Expand edges of region until flux goes above 1
-    regions_expanded = []
-    for reg in region_endpoints:
-        start = reg[0]
-        i = start
-        while i > 0 and fluxes[i] < 1.0:
-            i -= 1
-        start_new = i
-        end = reg[1]
-        j = end
-        while j < (len(fluxes)-1) and fluxes[j] < 1.0:
-            j += 1
-        end_new = j
-        regions_expanded.append([start_new, end_new])
+    # made extend a kwarg option
+    # lines may not go down to 0 again before next line starts
+    
+    if extend:
+        # Expand edges of region until flux goes above 1
+        regions_expanded = []
+        for reg in region_endpoints:
+            start = reg[0]
+            i = start
+            while i > 0 and taus[i] > tau_lim:
+                i -= 1
+            start_new = i
+            end = reg[1]
+            j = end
+            while j < (len(fluxes)-1) and taus[j] < tau_lim:
+                j += 1
+            end_new = j
+            regions_expanded.append([start_new, end_new])
+
+    else: regions_expanded = region_endpoints
 
     # Combine overlapping regions, check for detection based on noise value
     # and extend each region again by a buffer
@@ -666,6 +680,8 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
 
 if __name__ == "__main__":
 
+    filename = '/home/sarah/VAMP/vamp_test.png'
+
     vpfit = VPfit()
 
     clouds, wavelength_array = mock_absorption(n=2)
@@ -678,4 +694,4 @@ if __name__ == "__main__":
     vpfit.map_estimate()
     vpfit.mcmc_fit()
 
-    vpfit.plot(wavelength_array, flux_array, clouds, n=2)
+    vpfit.plot(wavelength_array, flux_array, clouds, n=2, filename=filename)
