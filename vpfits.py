@@ -378,14 +378,14 @@ f            alpha (float): Gaussian HWHM
 
 
 # dev: maybe change so input flux, go to tau method for tau
-def compute_detection_regions(wavelengths, fluxes, taus, noise, min_region_width=2, N_sigma=4.0, tau_lim=0.01, extend=False):
+def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width=2, N_sigma=4.0, tau_lim=0.01, extend=False):
     """
     Finds detection regions above some detection threshold and minimum width.
 
     Args:
         wavelengths (numpy array)
-	fluxes (numpy array): flux values at each wavelength
         taus (numpy array): optical depth values at each wavelength
+	fluxes (numpy array): flux values at each wavelength	
 	noise (numpy array): noise value at each wavelength 
         min_region_width (int): minimum width of a detection region (pixels)
 	N_sigma (float): detection threshold (std deviations)
@@ -393,7 +393,8 @@ def compute_detection_regions(wavelengths, fluxes, taus, noise, min_region_width
 	extend (boolean): default is False. Option to extend detected regions untill tau returns to continuum.
 
     Returns:
-        regions (numpy array): contains subarrays with start and end wavelengths
+        regions_l (numpy array): contains subarrays with start and end wavelengths
+	regions_i (numpy array): contains subarrays with start and end indices
     """
     print('Computing detection regions...')
 
@@ -472,9 +473,11 @@ def compute_detection_regions(wavelengths, fluxes, taus, noise, min_region_width
 
     else: regions_expanded = region_endpoints
 
+    # Change to return the region indices
     # Combine overlapping regions, check for detection based on noise value
     # and extend each region again by a buffer
-    regions = []
+    regions_l = []
+    regions_i = []
     buffer = 3
     for i in range(len(regions_expanded)):
         start = regions_expanded[i][0]
@@ -488,11 +491,12 @@ def compute_detection_regions(wavelengths, fluxes, taus, noise, min_region_width
                     start -= buffer
                 if end < len(wavelengths) - buffer:
                     end += buffer
-                regions.append([wavelengths[start], wavelengths[end]])
+                regions_l.append([wavelengths[start], wavelengths[end]])
+		regions_i.append([start, end])
                 break
 
-    print('Found {} detection regions.'.format(len(regions)))
-    return np.array(regions)
+    print('Found {} detection regions.'.format(len(regions_l)))
+    return np.array(regions_l), np.array(regions_i)
 
 def compute_detection_regions_small(wavelengths, fluxes, noise, min_region_width=1):
     """
