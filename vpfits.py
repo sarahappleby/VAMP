@@ -81,6 +81,21 @@ f            alpha (float): Gaussian HWHM
         return v(x)
 
 
+    @staticmethod
+    def ColumnDensity(tau, sigma):
+        """
+        Find the column density of an absorption line.
+        """
+        return tau / sigma
+
+    @staticmethod
+    def DopplerParameter(sigma, centroid):
+        """
+        Find the Doppler b parameter of an absorption line.
+        """
+        return sigma*centroid / np.sqrt(2)
+
+        
     def Absorption(self, arr):
         """
         Convert optical depth in to normalised flux profile.
@@ -202,7 +217,9 @@ f            alpha (float): Gaussian HWHM
 
     def initialise_components(self, wavelength_array, n, sigma_max = 5):
         """
-        Initialise each fitted component of the model in optical depth space. Each component consists of three variables, height, centroid and sigma. These variables are encapsulated in a deterministic profile variable. The variables are stored in a dictionary, `estimated_variables`, and the profiles in a list, `estimated_profiles`.
+        Initialise each fitted component of the model in optical depth space. Each component consists of three variables, 
+        height, centroid and sigma. These variables are encapsulated in a deterministic profile variable. The variables 
+        are stored in a dictionary, `estimated_variables`, and the profiles in a list, `estimated_profiles`.
 
         Args:
             wavelength_array (numpy array)
