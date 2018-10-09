@@ -272,7 +272,7 @@ f            alpha (float): Gaussian HWHM
 
             if (component < len(local_minima)):    # use minima location as center of normal prior
                 self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
-                      #  wavelength_array[local_minima[component]], (wavelength_array[-1] - wavelength_array[0]) / 2)
+                    #  wavelength_array[local_minima[component]], (wavelength_array[-1] - wavelength_array[0]) / 2)
                                                                             wavelength_array[0], wavelength_array[-1])
 
 
@@ -384,16 +384,16 @@ def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width
     Args:
         wavelengths (numpy array)
         taus (numpy array): optical depth values at each wavelength
-	fluxes (numpy array): flux values at each wavelength	
-	noise (numpy array): noise value at each wavelength 
+        fluxes (numpy array): flux values at each wavelength	
+        noise (numpy array): noise value at each wavelength 
         min_region_width (int): minimum width of a detection region (pixels)
-	N_sigma (float): detection threshold (std deviations)
-	tau_lim(float): minimum optical depth of a detection region
-	extend (boolean): default is False. Option to extend detected regions untill tau returns to continuum.
+        N_sigma (float): detection threshold (std deviations)
+        tau_lim(float): minimum optical depth of a detection region
+        extend (boolean): default is False. Option to extend detected regions untill tau returns to continuum.
 
     Returns:
         regions_l (numpy array): contains subarrays with start and end wavelengths
-	regions_i (numpy array): contains subarrays with start and end indices
+        regions_i (numpy array): contains subarrays with start and end indices
     """
     print('Computing detection regions...')
 
@@ -408,9 +408,9 @@ def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width
 
     # flux_ews has units of wavelength since flux is normalised. so we can use it for optical depth space
     for i in range(min_pix, max_pix):
-    	flux_dec = 1.0 - fluxes[i]
-	if flux_dec < noise[i]:
-            flux_dec = 0.0
+        flux_dec = 1.0 - fluxes[i]
+    if flux_dec < noise[i]:
+        flux_dec = 0.0
         flux_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * flux_dec
         noise_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * noise[i]
 
@@ -491,7 +491,7 @@ def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width
                 if end < len(wavelengths) - buffer:
                     end += buffer
                 regions_l.append([wavelengths[start], wavelengths[end]])
-		regions_i.append([start, end])
+                regions_i.append([start, end])
                 break
 
     print('Found {} detection regions.'.format(len(regions_l)))
