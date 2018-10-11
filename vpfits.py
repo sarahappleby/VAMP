@@ -425,10 +425,10 @@ def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width
     # flux_ews has units of wavelength since flux is normalised. so we can use it for optical depth space
     for i in range(min_pix, max_pix):
         flux_dec = 1.0 - fluxes[i]
-    if flux_dec < noise[i]:
-        flux_dec = 0.0
-    flux_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * flux_dec
-    noise_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * noise[i]
+         if flux_dec < noise[i]:
+            flux_dec = 0.0
+        flux_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * flux_dec
+        noise_ews[i] = 0.5 * abs(wavelengths[i - 1] - wavelengths[i + 1]) * noise[i]
 
     # dev: no need to set end values = 0. since loop does not set end values
     flux_ews[0] = 0.
