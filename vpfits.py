@@ -32,7 +32,11 @@ from astropy.modeling.models import Voigt1D
 from scipy.signal import find_peaks_cwt
 from scipy.signal import savgol_filter
 
+# gaussian smoothing modules
+from scipy.ndimage.filters import gaussian_filter
+from scipy.signal import argrelextrema
 
+from copy import copy
 
 class VPfit():
 
@@ -214,14 +218,15 @@ f            alpha (float): Gaussian HWHM
 
 
 
-    def initialise_components(self, wavelength_array, n, sigma_max = 5):
+    def initialise_components(self, frequency_array, n, sigma_max):
+        # need to change so that sigma_max is estimated
         """
         Initialise each fitted component of the model in optical depth space. Each component consists of three variables, 
         height, centroid and sigma. These variables are encapsulated in a deterministic profile variable. The variables 
         are stored in a dictionary, `estimated_variables`, and the profiles in a list, `estimated_profiles`.
 
         Args:
-            wavelength_array (numpy array)
+            frequency_array (numpy array)
             n (int): number of components
             sigma_max (float): maximum permitted range of fitted sigma values
         """
@@ -244,12 +249,12 @@ f            alpha (float): Gaussian HWHM
             #self.estimated_variables[component]['height'] = mc.Uniform("est_height_%d" % component, 0, 5)
 
             self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
-                                                                         wavelength_array[0], wavelength_array[-1])
+                                                                         frequency_array[0], frequency_array[-1])
 
             self.estimated_variables[component]['sigma'] = mc.Uniform("est_sigma_%d" % component, 0, sigma_max)
 
             @mc.deterministic(name='component_%d' % component, trace = True)
-            def profile(x=wavelength_array,
+            def profile(x=frequency_array,
                         centroid=self.estimated_variables[component]['centroid'],
                         sigma=self.estimated_variables[component]['sigma'],
                         height=self.estimated_variables[component]['height']):
@@ -259,16 +264,16 @@ f            alpha (float): Gaussian HWHM
             self.estimated_profiles.append(profile)
 
 
-    def initialise_voigt_profiles(self, wavelength_array, n, local_minima=[], sigma_max = 5):
+    def initialise_voigt_profiles(self, frequency_array, n, sigma_max, local_minima=[]):
         """
         Args:
-            wavelength_array (numpy array)
+            frequency_array (numpy array)
             n (int): number of components
             sigma_max (float): maximum permitted range of fitted sigma values
         """
 
         if n < len(local_minima):
-            raise ValueError("Less profiles than number of minima.")
+            raise ValueError("Less profiles than number of minimia.")
 
         self.estimated_variables = {}
         self.estimated_profiles = []
@@ -286,22 +291,15 @@ f            alpha (float): Gaussian HWHM
 
             self.estimated_variables[component]['amplitude'] = xexp
 
-            if (component < len(local_minima)):    # use minima location as center of normal prior
-                self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
-                    #  wavelength_array[local_minima[component]], (wavelength_array[-1] - wavelength_array[0]) / 2)
-                                                                            wavelength_array[0], wavelength_array[-1])
-
-
-            else:    # use a flat prior for subsequent components
-                self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
-                                                            wavelength_array[0], wavelength_array[-1])
+            self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
+                                                                            frequency_array[0], frequency_array[-1])
 
 
             self.estimated_variables[component]['L'] = mc.Uniform("est_L_%d" % component, 0, sigma_max)
             self.estimated_variables[component]['G'] = mc.Uniform("est_G_%d" % component, 0, sigma_max)
 
             @mc.deterministic(name='component_%d' % component, trace = True)
-            def profile(x=wavelength_array,
+            def profile(x=frequency_array,
                         centroid=self.estimated_variables[component]['centroid'],
                         amplitude=self.estimated_variables[component]['amplitude'],
                         L=self.estimated_variables[component]['L'],
@@ -312,25 +310,27 @@ f            alpha (float): Gaussian HWHM
 
 
 
-    def initialise_model(self, wavelength, flux, n, local_minima=[], voigt=False):
+    def initialise_model(self, frequency, flux, n, local_minima=[], voigt=False):
         """
         Initialise deterministic model of all absorption features, in normalised flux.
 
         Args:
-            wavelength (numpy array)
+            frequency (numpy array)
             flux (numpy array): flux values at each wavelength
             n (int): number of absorption profiles to fit
         """
+        
+        self.sigma_max = frequency[-1] - frequency[0]
 
         # always reinitialise profiles, otherwise starts sampling from previously calculated parameter values.
         if(voigt):
             if self.verbose:
                 print "Initialising Voigt profile components."
-            self.initialise_voigt_profiles(wavelength, n, local_minima)
+            self.initialise_voigt_profiles(frequency, n, local_minima, self.sigma_max)
         else:
             if self.verbose:
                 print "Initialising Gaussian profile components."
-            self.initialise_components(wavelength, n)
+            self.initialise_components(frequency, n, self.sigma_max)
 
         # deterministic variable for the full profile, given in terms of normalised flux
         @mc.deterministic(name='profile', trace=False)
@@ -390,6 +390,74 @@ f            alpha (float): Gaussian HWHM
         self.fit_time = str(datetime.datetime.now() - starttime)
         print "\nTook:", self.fit_time, " to finish."
 
+    def find_bic(self, frequency_array, flux_array, n, voigt=False, iterations=10000, thin=15, burn=1000):
+        self.bic_array = []
+        for _ in range(3):
+            self.initialise_model(frequency_array, flux_array, n, voigt=voigt)
+            self.map = mc.MAP(self.model)
+            self.mcmc = mc.MCMC(self.model)
+            self.map.fit(iterlim=iterations, tol=1e-3)
+            self.mcmc.sample(iter=2000, burn=burn, thin=thin, progress_bar=False)
+            self.map.fit(iterlim=iterations, tol=1e-3)
+            self.mcmc.sample(iter=2000, burn=burn, thin=thin, progress_bar=False)
+            self.map.fit(iterlim=iterations, tol=1e-3)
+            self.bic_array.append(self.map.BIC)
+
+def estimate_n(flux_array):
+    """
+    Make initial guess for number of local minima in the region.
+        
+    Smooth the spectra with a gaussian and find the number of local minima.
+    as a safety precaucion, set the initial guess for number of lines to 1 if
+    there are less than 4 local minima.
+
+    Args:
+        flux_array (numpy array)
+    """
+        
+    n = argrelextrema(gaussian_filter(flux_array, 3), np.less)[0].shape[0]
+    if n < 4:
+        n = 1
+    return n
+
+def do_everything():
+    vpfit = VPfit()
+    n = vpfit.estimate_n(flux_array)
+
+def mcmc_fit(frequency_array, flux_array, n, voigt=False, verbose=True, iterations=10000, thin=15, burn=1000):
+    """
+    Insert here the BIC minimisation process from notebook.
+    """
+
+    first = True
+    finished = False
+    if verbose:
+        print "Setting initial number of lines to: {}".format(n)
+    while not finished:
+        vpfit = VPfit()
+        vpfit.find_bic(frequency_array, flux_array, n, voigt=voigt)
+        if first:
+            first = False
+            n += 1
+            bic_old = vpfit.bic_array[-1]
+            vpfit_old = copy(vpfit)
+            del vpfit
+        else:
+            if bic_old > np.average(vpfit.bic_array):
+                if verbose:
+                    print "Old BIC value of {:.2f} is greater than the current {:.2f}.".format(bic_old, np.average(vpfit.bic_array))
+                    print "Increasing the number of lines to: {}".format(n+1)
+                n += 1
+                bic_old = np.average(vpfit.bic_array)
+                vpfit_old = copy(vpfit)
+                del vpfit
+            else:
+                if verbose:
+                    print "BIC increased with increasing the line number, stopping."
+                    print "Final n={}.".format(n-1)
+                finished = True
+    vpfit_old.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
+    return vpfit_old
 
 
 # dev: maybe change so input flux, go to tau method for tau
