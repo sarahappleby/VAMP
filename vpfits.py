@@ -73,7 +73,7 @@ class VPfit():
         Args:
             x (numpy array): wavelength array
             centroid (float): center of profile
-f            alpha (float): Gaussian HWHM
+            alpha (float): Gaussian HWHM
             gamma (float): Lorentzian HWHM
         """
 
