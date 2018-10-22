@@ -46,6 +46,7 @@ class VPfit():
         """
         self.std_deviation = 1./(mc.Uniform("sd", 0, 1) if noise is None else noise)**2
         self.verbose = False
+        self.sigma0 = 2.36e-6 # m**2 /s
 
 
     @staticmethod
@@ -85,18 +86,21 @@ class VPfit():
 
 
     @staticmethod
-    def ColumnDensity(tau, sigma):
+    def ColumnDensity(height, sigma):
         """
         Find the column density of an absorption line.
         """
-        return tau / sigma
+        return height*sigma(np.sqrt(2*np.pi) / self.sigma0
 
     @staticmethod
-    def DopplerParameter(sigma, centroid):
+    def DopplerParameter(sigma, l0):
         """
         Find the Doppler b parameter of an absorption line.
+        Args:
+            sigma (numpy array): the std deviation of the Gaussian in frequency space.
+            l0 (float): the rest wavelength of the absorption line.
         """
-        return sigma*centroid / np.sqrt(2)
+        return l0*1.e-13*sigma / np.sqrt(2)
 
         
     def Absorption(self, arr):
@@ -131,7 +135,7 @@ class VPfit():
             expected (array): same shape as observed
             freedom (int): degrees of freedom
         """
-        return VPfit.Chisquared(observed, expected, noise) / (np.sum(np.abs(1-observed) > noise*2) - freedom)
+        return VPfit.Chisquared(observed, expected, noise) / freedom
 
 
     def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None, filename=None):
@@ -141,7 +145,7 @@ class VPfit():
         Args:
             wavelength_array (numpy array):
             flux_array (numpy array): original flux array, same length as wavelength_array
-            filename (string): file name to save plot as
+            filename (string): for saving the plot
 	    clouds (pandas dataframe): dataframe containing details on each absorption feature
             n (int): number of *fitted* absorption profiles
             onesigmaerror (float): noise on profile plot
@@ -390,8 +394,23 @@ class VPfit():
         self.fit_time = str(datetime.datetime.now() - starttime)
         print "\nTook:", self.fit_time, " to finish."
 
-    def find_bic(self, frequency_array, flux_array, n, voigt=False, iterations=10000, thin=15, burn=1000):
+    def find_bic(self, frequency_array, flux_array, n, noise_array, freedom, voigt=False, iterations=10000, thin=15, burn=1000):
+        """
+        Initialise the Voigt model and run the MCMC fitting for a particular number of 
+        regions and return the Bayesian Information Criterion. Used to identify the 
+        most appropriate number of profles in the region.
+        
+        Args:
+            frequency_array (numpy array)
+            flux_array (numpy array)
+            n (int): number of minima to fit in the region
+            noise_array (numpy array)
+            freedom (int): number of degrees of freedom
+            voigt (Boolean): switch to fit as Voigt profile or Gaussian
+            iterations, thin, burn (ints): MCMC parameters
+        """
         self.bic_array = []
+        self.red_chi_array = []
         for _ in range(3):
             self.initialise_model(frequency_array, flux_array, n, voigt=voigt)
             self.map = mc.MAP(self.model)
@@ -402,13 +421,16 @@ class VPfit():
             self.mcmc.sample(iter=2000, burn=burn, thin=thin, progress_bar=False)
             self.map.fit(iterlim=iterations, tol=1e-3)
             self.bic_array.append(self.map.BIC)
+            self.red_chi_array.append(self.ReducedChisquared(flux_array, self.total.value, noise_array, freedom))
+        finished = True
+
 
 def estimate_n(flux_array):
     """
     Make initial guess for number of local minima in the region.
         
     Smooth the spectra with a gaussian and find the number of local minima.
-    as a safety precaucion, set the initial guess for number of lines to 1 if
+    as a safety precaucion, set the initial guess for number of profiles to 1 if
     there are less than 4 local minima.
 
     Args:
@@ -420,14 +442,60 @@ def estimate_n(flux_array):
         n = 1
     return n
 
-def do_everything():
-    vpfit = VPfit()
-    n = vpfit.estimate_n(flux_array)
+def do_everything(frequency_array, noise_array, tau_array, l0, filename=None):
 
-def mcmc_fit(frequency_array, flux_array, n, voigt=False, verbose=True, iterations=10000, thin=15, burn=1000):
+    vpfit = vpfits.VPfit
+
+    wavelength_array = vpfit.c / frequency_array
+    flux_array = np.exp(-np.array(tau_array)) + noise_array 
+
+    # identify regions to fit in the spectrum
+    regions, region_pixels = compute_detection_regions(wavelength_array, tau_array, flux_array, noise_array, min_region_width=2)
+   
+    b_array = []
+    N_array = []
+
+    for start, end in region_pixels:
+        fluxes = flux_array[start:end]
+        noise = noise_array[start:end]
+        nu = frequency_array[start:end]
+
+        # make initial guess for number of lines in a region
+        n = vpfit.estimate_n(fluxes)
+
+        # number of degrees of freedom = number of data points + number of parameters 
+        freedom = len(nu) + 3
+        
+        # fit the region
+        fit = region_fit(nu, fluxes, n, noise, freedom)
+        n = len(fit.estimated_variables)
+
+        heights = np.array([fit.estimated_variables[i]['height'].value for i in range(n)])
+        sigmas = np.array([fit.estimated_variables[i]['sigma'].value for i in range(n)])
+        centers = np.array([fit.estimated_variables[i]['centroid'].value for i in range(n)])
+    
+        if filename:
+            vpfit.plot(wavelength_array, flux_array, n=n, start_pix=start, end_pix=end, filename=filename)
+
+        b_array.append(vpfit.DopplerParamter(sigmas, l0))
+        N_array.append(vpfit.ColumnDensity(heights, sigmas))
+        
+
+def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False, verbose=True, iterations=10000, thin=15, burn=1000):
     """
-    Insert here the BIC minimisation process from notebook.
+    Fit the line region with n Gaussian/Voigt profiles using a BIC method.
+
+    Args:
+        frequency_array (numpy array)
+        flux_array (numpy array)
+        n (int) initial guess for number of profiles
+        voigt (Boolean): switch to fit as Voigt profiles or Gaussians
+        iterations, thin, burn (int): MCMC parameters
     """
+    if frequency_array[0] > frequency_array[-1]:
+        frequency_array = np.flip(frequency_array, 0)
+        flux_array = np.flip(flux_array, 0)
+        noise_array = np.flip(noise_array, 0)
 
     first = True
     finished = False
@@ -435,7 +503,7 @@ def mcmc_fit(frequency_array, flux_array, n, voigt=False, verbose=True, iteratio
         print "Setting initial number of lines to: {}".format(n)
     while not finished:
         vpfit = VPfit()
-        vpfit.find_bic(frequency_array, flux_array, n, voigt=voigt)
+        vpfit.find_bic(frequency_array, flux_array, n, noise_array, freedom, voigt=voigt)
         if first:
             first = False
             n += 1
@@ -446,16 +514,24 @@ def mcmc_fit(frequency_array, flux_array, n, voigt=False, verbose=True, iteratio
             if bic_old > np.average(vpfit.bic_array):
                 if verbose:
                     print "Old BIC value of {:.2f} is greater than the current {:.2f}.".format(bic_old, np.average(vpfit.bic_array))
-                    print "Increasing the number of lines to: {}".format(n+1)
-                n += 1
                 bic_old = np.average(vpfit.bic_array)
                 vpfit_old = copy(vpfit)
+                if np.average(np.abs(vpfit.red_chi_array)) < 1.:
+                    if verbose:
+                        print "Reduced Chi squared is less than 1."
+                        print "Final n={}".format(n)
+                    finished = True
+                    continue
+                n += 1
                 del vpfit
+                if verbose:
+                    print "Increasing the number of lines to: {}".format(n)
             else:
                 if verbose:
                     print "BIC increased with increasing the line number, stopping."
                     print "Final n={}.".format(n-1)
                 finished = True
+                continue
     vpfit_old.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
     return vpfit_old
 
