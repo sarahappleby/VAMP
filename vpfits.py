@@ -23,6 +23,7 @@ import pandas as pd
 import pymc as mc
 
 import matplotlib.pylab as pylab
+import matplotlib.pyplot as plt
 
 # Voigt modules
 # from scipy.special import wofz
@@ -261,8 +262,8 @@ class VPfit():
             sigma_max (float): maximum permitted range of fitted sigma values
         """
 
-        if n < len(local_minima):
-            raise ValueError("Less profiles than number of minimia.")
+        #if n < len(local_minima):
+        #    raise ValueError("Less profiles than number of minima.")
 
         self.estimated_variables = {}
         self.estimated_profiles = []
@@ -411,148 +412,79 @@ class VPfit():
         finished = True
 
 
-def estimate_n(flux_array):
+def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
+                    plot=True, onesigmaerror = 0.02, saturated=False, voigt=False):
     """
-    Make initial guess for number of local minima in the region.
-        
-    Smooth the spectra with a gaussian and find the number of local minima.
-    as a safety precaucion, set the initial guess for number of profiles to 1 if
-    there are less than 4 local minima.
+    Generate a mock absorption profile.
 
     Args:
-        flux_array (numpy array)
-    """
-        
-    n = argrelextrema(gaussian_filter(flux_array, 3), np.less)[0].shape[0]
-    if n < 4:
-        n = 1
-    return n
-
-
-def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, filename=None):
-    """
-    The main function. Takes an input spectrum, splits it into manageable regions, and fits 
-    the individual regions using PyMC. Finally calculates the Doppler parameter b, the 
-    column density N and the equivalent width and the centroids of the absorption lines.
-
-    Args:
-        wavelength_array (numpy array)
-        noise_array (numpy array)
-        tau_array (numpy array)
-        line (float): the rest wavelength of the absorption line
-        voigt (boolean): switch to fit Voigt profile instead of Gaussian. Default: True.
-        filename (string): if plotting the fits and saving them, provide a filename. Default: None.
+        wavelength_start (int): start of wavelength range
+        wavelength_end (int): end of wavelength range
+        n (int): number of absorption features
+        plot (bool): plots the profile
+        onesigmaerror (float): noise on profile plot
 
     Returns:
-        b (numpy array): Doppler parameter, in km/s.
-        N (numpy array): Column density, in m**-2
-        ew (numpy array): Equivalent widths, in Angstroms.
-        centers (numpy array): Centroids of absorption lines, in Angstroms.
+        clouds (pandas dataframe): dataframe containing parameters for each absorption feature
+        wavelength_array (numpy array)
     """
 
-    frequency_array = constants['c']['value'] / (wavelength_array*1.e-10) 
-    flux_array = Tau2flux(tau_array) + noise_array 
+    vpfit = VPfit()
 
-    # identify regions to fit in the spectrum
-    regions, region_pixels = compute_detection_regions(wavelength_array, tau_array, 
-                            flux_array, noise_array, min_region_width=2)
+    wavelength_array = np.arange(wavelength_start, wavelength_end, 0.01)
 
-    b_array = []
-    N_array = []
-    ew_array = []
-    center_array =[]
+    clouds = pd.DataFrame({'cloud': pd.Series([], dtype='str'),
+                       'amplitude': pd.Series([], dtype='float'),
+                       'centroid': pd.Series([], dtype='float'),
+                       'sigma': pd.Series([], dtype='float'),
+                       'tau': pd.Series([], dtype='object')})
 
-    for start, end in region_pixels:
-        fluxes = flux_array[start:end]
-        noise = noise_array[start:end]
-        waves = wavelength_array[start:end]
-        nu = frequency_array[start:end]
-        taus = tau_array[start:end]
+    for cloud in range(n):
 
-        # make initial guess for number of lines in a region
-        n = estimate_n(fluxes)
-
-        # number of degrees of freedom = number of data points + number of parameters 
-        freedom = len(nu) + 3
-        
-        # fit the region
-        fit = region_fit(nu, fluxes, n, noise, freedom, voigt=voigt)
-        n = len(fit.estimated_variables)
-
-        if filename:
-            fit.plot(waves, fluxes, n=n, start_pix=start, end_pix=end, filename=filename)
-
-        heights = np.array([fit.estimated_variables[i]['height'].value for i in range(n)])
-        centers = np.array([fit.estimated_variables[i]['centroid'].value for i in range(n)])
-
-        if not voigt:
-            sigmas = np.array([fit.estimated_variables[i]['sigma'].value for i in range(n)])
-        
-        elif voigt:
-            g_fwhms = np.array([fit.estimated_variables[i]['G_fwhm'].value for i in range(n)])
-            sigmas = GaussianWidth(g_fwhms)
-
-        b_array.append(DopplerParameter(sigmas, line))
-        N_array.append(ColumnDensity(heights, sigmas))
-        ew_array.append(EquivalentWidth(taus, [waves[0], waves[-1]]))
-        center_array.append((constants['c']['value'] / centers) / 1.e-10)
-
-    return b_array, N_array, ew_array, centers
-
-
-def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False, verbose=True, iterations=10000, thin=15, burn=1000):
-    """
-    Fit the line region with n Gaussian/Voigt profiles using a BIC method.
-
-    Args:
-        frequency_array (numpy array)
-        flux_array (numpy array)
-        n (int) initial guess for number of profiles
-        voigt (Boolean): switch to fit as Voigt profiles or Gaussians
-        iterations, thin, burn (int): MCMC parameters
-    """
-    if frequency_array[0] > frequency_array[-1]:
-        frequency_array = np.flip(frequency_array, 0)
-        flux_array = np.flip(flux_array, 0)
-        noise_array = np.flip(noise_array, 0)
-
-    first = True
-    finished = False
-    if verbose:
-        print "Setting initial number of lines to: {}".format(n)
-    while not finished:
-        vpfit = VPfit()
-        vpfit.find_bic(frequency_array, flux_array, n, noise_array, freedom, voigt=voigt)
-        if first:
-            first = False
-            n += 1
-            bic_old = vpfit.bic_array[-1]
-            vpfit_old = copy(vpfit)
-            del vpfit
+        if(saturated):
+            max_amplitude = 5
         else:
-            if bic_old > np.average(vpfit.bic_array):
-                if verbose:
-                    print "Old BIC value of {:.2f} is greater than the current {:.2f}.".format(bic_old, np.average(vpfit.bic_array))
-                bic_old = np.average(vpfit.bic_array)
-                vpfit_old = copy(vpfit)
-                if np.average(np.abs(vpfit.red_chi_array)) < 1.:
-                    if verbose:
-                        print "Reduced Chi squared is less than 1."
-                        print "Final n={}".format(n)
-                    finished = True
-                    continue
-                n += 1
-                del vpfit
-                if verbose:
-                    print "Increasing the number of lines to: {}".format(n)
-            else:
-                if verbose:
-                    print "BIC increased with increasing the line number, stopping."
-                    print "Final n={}.".format(n-1)
-                finished = True
-                continue
-    vpfit_old.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
-    return vpfit_old
+            max_amplitude = 1
+
+        if(voigt):
+            clouds = clouds.append({'cloud': cloud, 'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
+                                    'amplitude': random.uniform(0, max_amplitude),
+                                    'L': random.uniform(0,2), 'G': random.uniform(0,2), 'tau':[]}, ignore_index=True)
+
+            clouds.set_value(cloud, 'tau', VPfit.VoigtFunction(wavelength_array, clouds.loc[cloud]['centroid'],
+                                            clouds.loc[cloud]['amplitude'], clouds.loc[cloud]['L'], clouds.loc[cloud]['G']))
+
+        else:
+            clouds = clouds.append({'cloud': cloud, 'amplitude': random.uniform(0, max_amplitude),
+                                    'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
+                                    'sigma': random.uniform(0,2), 'tau':[]}, ignore_index=True)
+
+            clouds.set_value(cloud, 'tau', VPfit.GaussFunction(wavelength_array, clouds.loc[cloud]['amplitude'],
+                                             clouds.loc[cloud]['centroid'], clouds.loc[cloud]['sigma']))
+
+
+    if plot:
+        noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
+        flux_array = Tau2flux(sum(clouds['tau'])) + noise
+
+        f, (ax1, ax2) = pylab.subplots(2, sharex=True, sharey=False)
+
+        ax1.plot(wavelength_array, sum(clouds['tau']), color='black', label='combined', lw=2)
+        for c in range(len(clouds)):
+            ax1.plot(wavelength_array, clouds.ix[c]['tau'], label='comp_1')
+
+        ax2.plot(wavelength_array, flux_array, color='black')
+        f.subplots_adjust(hspace=0)
+
+        ax1.set_ylabel("Optical Depth")
+
+        ax2.set_ylabel("Normalized Flux")
+        ax2.set_xlabel("$\lambda (\AA)$")
+        ax2.set_ylim(0, 1.1)
+
+        pylab.show()
+
+    return clouds, wavelength_array
 
 
 # dev: maybe change so input flux, go to tau method for tau
@@ -563,7 +495,7 @@ def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width
     Args:
         wavelengths (numpy array)
         taus (numpy array): optical depth values at each wavelength
-        fluxes (numpy array): flux values at each wavelength	
+        fluxes (numpy array): flux values at each wavelength    
         noise (numpy array): noise value at each wavelength 
         min_region_width (int): minimum width of a detection region (pixels)
         N_sigma (float): detection threshold (std deviations)
@@ -677,95 +609,267 @@ def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width
     return np.array(regions_l), np.array(regions_i)
 
 
-def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
-                    plot=True, onesigmaerror = 0.02, saturated=False, voigt=False):
+def estimate_n(flux_array):
     """
-    Generate a mock absorption profile.
+    Make initial guess for number of local minima in the region.
+        
+    Smooth the spectra with a gaussian and find the number of local minima.
+    as a safety precaucion, set the initial guess for number of profiles to 1 if
+    there are less than 4 local minima.
 
     Args:
-        wavelength_start (int): start of wavelength range
-        wavelength_end (int): end of wavelength range
-        n (int): number of absorption features
-        plot (bool): plots the profile
-        onesigmaerror (float): noise on profile plot
+        flux_array (numpy array)
+    """
+        
+    n = argrelextrema(gaussian_filter(flux_array, 3), np.less)[0].shape[0]
+    if n < 4:
+        n = 1
+    return n
+
+
+def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False, verbose=True, iterations=10000, thin=15, burn=1000):
+    """
+    Fit the line region with n Gaussian/Voigt profiles using a BIC method.
+
+    Args:
+        frequency_array (numpy array)
+        flux_array (numpy array)
+        n (int) initial guess for number of profiles
+        voigt (Boolean): switch to fit as Voigt profiles or Gaussians
+        iterations, thin, burn (int): MCMC parameters
+    """
+    if frequency_array[0] > frequency_array[-1]:
+        frequency_array = np.flip(frequency_array, 0)
+        flux_array = np.flip(flux_array, 0)
+        noise_array = np.flip(noise_array, 0)
+
+    first = True
+    finished = False
+    if verbose:
+        print "Setting initial number of lines to: {}".format(n)
+    while not finished:
+        vpfit = VPfit()
+        vpfit.find_bic(frequency_array, flux_array, n, noise_array, freedom, voigt=voigt)
+        if first:
+            first = False
+            n += 1
+            bic_old = vpfit.bic_array[-1]
+            vpfit_old = copy(vpfit)
+            del vpfit
+        else:
+            if bic_old > np.average(vpfit.bic_array):
+                if verbose:
+                    print "Old BIC value of {:.2f} is greater than the current {:.2f}.".format(bic_old, np.average(vpfit.bic_array))
+                bic_old = np.average(vpfit.bic_array)
+                vpfit_old = copy(vpfit)
+                if np.average(np.abs(vpfit.red_chi_array)) < 1.:
+                    if verbose:
+                        print "Reduced Chi squared is less than 1."
+                        print "Final n={}".format(n)
+                    finished = True
+                    continue
+                n += 1
+                del vpfit
+                if verbose:
+                    print "Increasing the number of lines to: {}".format(n)
+            else:
+                if verbose:
+                    print "BIC increased with increasing the line number, stopping."
+                    print "Final n={}.".format(n-1)
+                finished = True
+                continue
+    vpfit_old.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
+    return vpfit_old
+
+
+
+def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, folder=None):
+    """
+    The main function. Takes an input spectrum, splits it into manageable regions, and fits 
+    the individual regions using PyMC. Finally calculates the Doppler parameter b, the 
+    column density N and the equivalent width and the centroids of the absorption lines.
+
+    Args:
+        wavelength_array (numpy array): in Angstroms
+        noise_array (numpy array)
+        tau_array (numpy array)
+        line (float): the rest wavelength of the absorption line in Angstroms
+        voigt (boolean): switch to fit Voigt profile instead of Gaussian. Default: True.
+        folder (string): if plotting the fits and saving them, provide a directory. Default: None.
 
     Returns:
-        clouds (pandas dataframe): dataframe containing parameters for each absorption feature
-        wavelength_array (numpy array)
+        b (numpy array): Doppler parameter, in km/s.
+        N (numpy array): Column density, in m**-2
+        ew (numpy array): Equivalent widths, in Angstroms.
+        centers (numpy array): Centroids of absorption lines, in Angstroms.
     """
 
-    vpfit = VPfit()
+    frequency_array = constants['c']['value'] / (wavelength_array*1.e-10) 
+    flux_array = Tau2flux(tau_array) + noise_array 
 
-    wavelength_array = np.arange(wavelength_start, wavelength_end, 0.01)
+    # identify regions to fit in the spectrum
+    regions, region_pixels = compute_detection_regions(wavelength_array, tau_array, 
+                            flux_array, noise_array, min_region_width=2)
 
-    clouds = pd.DataFrame({'cloud': pd.Series([], dtype='str'),
-                       'amplitude': pd.Series([], dtype='float'),
-                       'centroid': pd.Series([], dtype='float'),
-                       'sigma': pd.Series([], dtype='float'),
-                       'tau': pd.Series([], dtype='object')})
+    b_array = []
+    N_array = []
+    ew_array = []
+    center_array = []
 
-    for cloud in range(n):
+    flux_model = {'total': np.ones(len(flux_array))}
+    j = 0
 
-        if(saturated):
-            max_amplitude = 5
-        else:
-            max_amplitude = 1
+    for start, end in region_pixels:
+        fluxes = flux_array[start:end]
+        noise = noise_array[start:end]
+        waves = wavelength_array[start:end]
+        nu = frequency_array[start:end]
+        taus = tau_array[start:end]
 
-        if(voigt):
-            clouds = clouds.append({'cloud': cloud, 'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
-                                    'amplitude': random.uniform(0, max_amplitude),
-                                    'L': random.uniform(0,2), 'G': random.uniform(0,2), 'tau':[]}, ignore_index=True)
+        # make initial guess for number of lines in a region
+        n = estimate_n(fluxes)
 
-            clouds.set_value(cloud, 'tau', VPfit.VoigtFunction(wavelength_array, clouds.ix[cloud]['centroid'],
-                                            clouds.ix[cloud]['amplitude'], clouds.ix[cloud]['L'], clouds.ix[cloud]['G']))
+        # number of degrees of freedom = number of data points + number of parameters 
+        freedom = len(nu) + 3
+        
+        # fit the region
+        fit = region_fit(nu, fluxes, n, noise, freedom, voigt=voigt)
+        n = len(fit.estimated_variables)
 
-        else:
-            clouds = clouds.append({'cloud': cloud, 'amplitude': random.uniform(0, max_amplitude),
-                                    'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
-                                    'sigma': random.uniform(0,2), 'tau':[]}, ignore_index=True)
-
-            clouds.set_value(cloud, 'tau', VPfit.GaussFunction(wavelength_array, clouds.ix[cloud]['amplitude'],
-                                             clouds.ix[cloud]['centroid'], clouds.ix[cloud]['sigma']))
+        flux_model['total'][start:end] = fit.total.value
+        flux_model['region_'+str(j)] = np.ones((n, len(fluxes)))
+        for k in range(n):
+            flux_model['region_'+str(j)][k] = Tau2flux(fit.estimated_profiles[k].value)
 
 
-    if plot:
-        noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
-        flux_array = vpfit.Tau2flux(sum(clouds['tau'])) + noise
+        heights = np.array([fit.estimated_variables[i]['height'].value for i in range(n)])
+        centers = np.array([fit.estimated_variables[i]['centroid'].value for i in range(n)])
 
-        f, (ax1, ax2) = pylab.subplots(2, sharex=True, sharey=False)
+        if not voigt:
+            sigmas = np.array([fit.estimated_variables[i]['sigma'].value for i in range(n)])
+        
+        elif voigt:
+            g_fwhms = np.array([fit.estimated_variables[i]['G_fwhm'].value for i in range(n)])
+            sigmas = GaussianWidth(g_fwhms)
 
-        ax1.plot(wavelength_array, sum(clouds['tau']), color='black', label='combined', lw=2)
-        for c in range(len(clouds)):
-            ax1.plot(wavelength_array, clouds.ix[c]['tau'], label='comp_1')
+        b_array.append(DopplerParameter(sigmas, line))
+        N_array.append(ColumnDensity(heights, sigmas))
+        ew_array.append(EquivalentWidth(taus, [waves[0], waves[-1]]))
+        center_array.append((constants['c']['value'] / centers) / 1.e-10)
 
-        ax2.plot(wavelength_array, flux_array, color='black')
-        f.subplots_adjust(hspace=0)
+        j += 1
 
-        ax1.set_ylabel("Optical Depth")
+    if folder:
+        plot_spectrum(wavelength_array, flux_array, flux_model, region_pixels, folder)
 
-        ax2.set_ylabel("Normalized Flux")
-        ax2.set_xlabel("$\lambda (\AA)$")
-        ax2.set_ylim(0, 1.1)
+    return b_array, N_array, ew_array, centers, flux_model
 
-        pylab.show()
 
-    return clouds, wavelength_array
+def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
+    """
+    Routine to plot the fits to the data. First plot is the total fit, second is the component
+    Voigt profiles, third is the residuals.
+    Args:
+        wavelength_array (numpy array)
+        flux_data (numpy array): data values for flux 
+        flux_model (dict): dict output of the fitting routine, containing profiles for each 
+                            component
+        regions  (numpy array): pixel boundaries for the regions of the spectrum
+        folder (string): a directory for saving the plots
+    """
 
+    def plot_bracket(x, axis, dir):
+        height = .2
+        arm_length = 0.1
+        axis.plot((x, x), (1-height/2, 1+height/2), color='magenta')
+
+        if dir=='left':
+            xarm = x+arm_length
+        if dir=='right':
+            xarm = x-arm_length
+
+        axis.plot((x, xarm), (1-height/2, 1-height/2), color='magenta')
+        axis.plot((x, xarm), (1+height/2, 1+height/2), color='magenta')
+
+    model = flux_model['total']
+
+    N = 6
+    length = len(flux_data) / N
+
+    fig, ax = plt.subplots(N, figsize=(15,15))
+    for n in range(N):
+        lower_lim = n*length
+        upper_lim = n*length+length
+
+        ax[n].plot(wavelength_array, flux_data, c='black', label='Measured')
+        ax[n].plot(wavelength_array, model, c='green', label='Fit')
+        ax[n].set_xlim(wavelength_array[lower_lim], wavelength_array[upper_lim])
+        for (start, end) in regions:
+            plot_bracket(wavelength_array[start], ax[n], 'left')
+            plot_bracket(wavelength_array[end], ax[n], 'right')
+
+    plt.xlabel('Wavelength (A)')
+    plt.ylabel('Flux')
+    plt.savefig(folder+'vamp_fit.png')
+    plt.clf()
+
+    fig, ax = plt.subplots(N, figsize=(15,15))
+    for n in range(N):
+        lower_lim = n*length
+        upper_lim = n*length+length
+
+        for i in range(len(regions)):
+            start, end = regions[i]
+            region_data = flux_model['region_'+str(i)]
+            for j in range(len(region_data)):
+                ax[n].plot(wavelength_array[start:end], region_data[j], c='green')
+            plot_bracket(wavelength_array[start], ax[n], 'left')
+            plot_bracket(wavelength_array[end], ax[n], 'right')
+
+        ax[n].set_xlim(wavelength_array[lower_lim], wavelength_array[upper_lim])        
+
+    plt.xlabel('Wavelength (A)')
+    plt.ylabel('Flux')
+    plt.savefig(folder+'vamp_components.png')
+    plt.clf()    
+
+    fig, ax = plt.subplots(N, figsize=(15,15))
+    for n in range(N):
+        lower_lim = n*length
+        upper_lim = n*length+length
+
+        ax[n].plot(wavelength_array, (flux_data - model), c='blue')
+        ax[n].hlines(1, wavelength_array[0], wavelength_array[-1], color='red', linestyles='-')
+        ax[n].hlines(-1, wavelength_array[0], wavelength_array[-1], color='red', linestyles='-')
+        ax[n].hlines(3, wavelength_array[0], wavelength_array[-1], color='red', linestyles='--')
+        ax[n].hlines(-3, wavelength_array[0], wavelength_array[-1], color='red', linestyles='--')
+        ax[n].set_xlim(wavelength_array[lower_lim], wavelength_array[upper_lim])
+        for (start, end) in regions:
+            plot_bracket(wavelength_array[start], ax[n], 'left')
+            plot_bracket(wavelength_array[end], ax[n], 'right')
+
+    plt.xlabel('Wavelength (A)')
+    plt.ylabel('Flux')
+    plt.savefig(folder+'vamp_residuals.png')
+    plt.clf()
+
+    return
 
 if __name__ == "__main__":
 
-    filename = '/home/sarah/VAMP/vamp_test.png'
+    import h5py
+    folder = '/home/sarah/VAMP/plots/'
 
-    vpfit = VPfit()
+    line = 1036.
+    #clouds, wavelength_array = mock_absorption(wavelength_start=line-5., wavelength_end=line+5., n=2)
 
-    clouds, wavelength_array = mock_absorption(n=2)
+    #onesigmaerror = 0.02
+    #noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
+    
+    data = h5py.File('data/spectrum_pygad_CII1036.h5', 'r')
+    
+    wavelength = data['wavelength'][:]
+    noise = data['noise'][:]
+    taus = data['tau'][:]
 
-    onesigmaerror = 0.02
-    noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
-    flux_array = vpfit.Tau2flux(sum(clouds['tau'])) + noise
-
-    vpfit.initialise_model(wavelength_array, flux_array, 2)
-    vpfit.map_estimate()
-    vpfit.mcmc_fit()
-
-    vpfit.plot(wavelength_array, flux_array, clouds, n=2, filename=filename)
+    b, N, EW, centers, flux_model = fit_spectrum(wavelength, noise, taus, line, voigt=False, folder=folder)
