@@ -38,6 +38,8 @@ from scipy.signal import argrelextrema
 
 from copy import copy
 
+sigma0 = 2.36e-6
+
 class VPfit():
 
     def __init__(self, noise=None):
@@ -90,7 +92,7 @@ class VPfit():
         """
         Find the column density of an absorption line.
         """
-        return height*sigma(np.sqrt(2*np.pi) / self.sigma0
+        return height*sigma*np.sqrt(2*np.pi) / sigma0
 
     @staticmethod
     def DopplerParameter(sigma, l0):
@@ -102,8 +104,8 @@ class VPfit():
         """
         return l0*1.e-13*sigma / np.sqrt(2)
 
-        
-    def Absorption(self, arr):
+    @staticmethod
+    def Absorption(arr):
         """
         Convert optical depth in to normalised flux profile.
 
