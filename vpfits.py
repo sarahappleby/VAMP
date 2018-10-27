@@ -1,14 +1,14 @@
 """
 VPfit
 
-Fit Voigt Profiles using MCMC. Uses bayesian model selection to pick the appropriate number of profiles for a given absorption.
+Fit Voigt Profiles using MCMC. Uses bayesian model selection to pick the appropriate number 
+of profiles for a given absorption.
 
-The main class containing the fitting functionality is `VPfit`. A mock absorption generator, `mock_absorption`, is also included for demonstration.
+The main class containing the fitting functionality is `VPfit`. A mock absorption generator, 
+`mock_absorption`, is also included for demonstration.
 
 See `__init__` for example usage.
 
-Todo:
-* Add Voigt profile
 """
 
 import matplotlib
@@ -124,7 +124,8 @@ class VPfit():
         return VPfit.Chisquared(observed, expected, noise) / freedom
 
 
-    def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, start_pix=None, end_pix=None, filename=None):
+    def plot(self, wavelength_array, flux_array, clouds=None, n=1, onesigmaerror = 0.02, 
+            start_pix=None, end_pix=None, filename=None):
         """
         Plot the fitted absorption profile
 
@@ -211,9 +212,10 @@ class VPfit():
     def initialise_components(self, frequency_array, n, sigma_max):
         # need to change so that sigma_max is estimated
         """
-        Initialise each fitted component of the model in optical depth space. Each component consists of three variables, 
-        height, centroid and sigma. These variables are encapsulated in a deterministic profile variable. The variables 
-        are stored in a dictionary, `estimated_variables`, and the profiles in a list, `estimated_profiles`.
+        Initialise each fitted component of the model in optical depth space. Each component 
+        consists of three variables, height, centroid and sigma. These variables are encapsulated 
+        in a deterministic profile variable. The variables are stored in a dictionary, `estimated_variables`, 
+        and the profiles in a list, `estimated_profiles`.
 
         Args:
             frequency_array (numpy array)
@@ -235,7 +237,7 @@ class VPfit():
                 else:
                     return np.log(value * np.exp(-value))
 
-            self.estimated_variables[component]['height'] = xexp
+            self.estimated_variables[component]['amplitude'] = xexp
             #self.estimated_variables[component]['height'] = mc.Uniform("est_height_%d" % component, 0, 5)
 
             self.estimated_variables[component]['centroid'] = mc.Uniform("est_centroid_%d" % component,
@@ -247,7 +249,7 @@ class VPfit():
             def profile(x=frequency_array,
                         centroid=self.estimated_variables[component]['centroid'],
                         sigma=self.estimated_variables[component]['sigma'],
-                        height=self.estimated_variables[component]['height']):
+                        height=self.estimated_variables[component]['amplitude']):
 
                 return self.GaussFunction(x, height, centroid, sigma )
 
@@ -285,15 +287,15 @@ class VPfit():
                                                                             frequency_array[0], frequency_array[-1])
 
 
-            self.estimated_variables[component]['L'] = mc.Uniform("est_L_%d" % component, 0, sigma_max)
-            self.estimated_variables[component]['G'] = mc.Uniform("est_G_%d" % component, 0, sigma_max)
+            self.estimated_variables[component]['L_fwhm'] = mc.Uniform("est_L_%d" % component, 0, sigma_max)
+            self.estimated_variables[component]['G_fwhm'] = mc.Uniform("est_G_%d" % component, 0, sigma_max)
 
             @mc.deterministic(name='component_%d' % component, trace = True)
             def profile(x=frequency_array,
                         centroid=self.estimated_variables[component]['centroid'],
                         amplitude=self.estimated_variables[component]['amplitude'],
-                        L=self.estimated_variables[component]['L'],
-                        G=self.estimated_variables[component]['G']):
+                        L=self.estimated_variables[component]['L_fwhm'],
+                        G=self.estimated_variables[component]['G_fwhm']):
                 return self.VoigtFunction(x, centroid, amplitude, L, G)
 
             self.estimated_profiles.append(profile)
@@ -315,7 +317,8 @@ class VPfit():
         if(voigt):
             if self.verbose:
                 print "Initialising Voigt profile components."
-            self.initialise_voigt_profiles(frequency, n, local_minima, self.sigma_max)
+            self.fwhm_max = self.sigma_max * 2*np.sqrt(2*np.log(2.))
+            self.initialise_voigt_profiles(frequency, n, self.fwhm_max, local_minima=local_minima)
         else:
             if self.verbose:
                 print "Initialising Gaussian profile components."
@@ -332,7 +335,8 @@ class VPfit():
         self.profile = mc.Normal("obs", self.total, self.std_deviation, value=flux, observed=True)
 
         # create model with parameters of all profiles to be fitted
-        self.model = mc.Model([self.estimated_variables[x][y] for x in self.estimated_variables for y in self.estimated_variables[x]])# + [std_deviation])
+        self.model = mc.Model([self.estimated_variables[x][y] for x in self.estimated_variables \
+                            for y in self.estimated_variables[x]])# + [std_deviation])
 
 
     def map_estimate(self, iterations=2000):
@@ -358,7 +362,8 @@ class VPfit():
         try:
             getattr(self, 'map')
         except AttributeError:
-            print "\nWARNING: MAP estimate not provided. \nIt is recommended to compute this in advance of running the MCMC so as to start the sampling with good initial values."
+            print "\nWARNING: MAP estimate not provided. \nIt is recommended to compute this \
+            in advance of running the MCMC so as to start the sampling with good initial values."
 
         # create MCMC object
         self.mcmc = mc.MCMC(self.model)
@@ -380,7 +385,8 @@ class VPfit():
         print "\nTook:", self.fit_time, " to finish."
 
 
-    def find_bic(self, frequency_array, flux_array, n, noise_array, freedom, voigt=False, iterations=10000, thin=15, burn=1000):
+    def find_bic(self, frequency_array, flux_array, n, noise_array, freedom, voigt=False, 
+                iterations=10000, thin=15, burn=1000):
         """
         Initialise the Voigt model and run the MCMC fitting for a particular number of 
         regions and return the Bayesian Information Criterion. Used to identify the 
@@ -488,7 +494,8 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
 
 
 # dev: maybe change so input flux, go to tau method for tau
-def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width=2, N_sigma=4.0, tau_lim=0.01, extend=False):
+def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width=2, 
+                            N_sigma=4.0, tau_lim=0.01, extend=False):
     """
     Finds detection regions above some detection threshold and minimum width.
 
@@ -500,7 +507,8 @@ def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width
         min_region_width (int): minimum width of a detection region (pixels)
         N_sigma (float): detection threshold (std deviations)
         tau_lim(float): minimum optical depth of a detection region
-        extend (boolean): default is False. Option to extend detected regions untill tau returns to continuum.
+        extend (boolean): default is False. Option to extend detected regions untill tau 
+                        returns to continuum.
 
     Returns:
         regions_l (numpy array): contains subarrays with start and end wavelengths
@@ -627,7 +635,8 @@ def estimate_n(flux_array):
     return n
 
 
-def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False, verbose=True, iterations=10000, thin=15, burn=1000):
+def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False, 
+                verbose=True, iterations=10000, thin=15, burn=1000):
     """
     Fit the line region with n Gaussian/Voigt profiles using a BIC method.
 
@@ -742,7 +751,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, fo
             flux_model['region_'+str(j)][k] = Tau2flux(fit.estimated_profiles[k].value)
 
 
-        heights = np.array([fit.estimated_variables[i]['height'].value for i in range(n)])
+        heights = np.array([fit.estimated_variables[i]['amplitude'].value for i in range(n)])
         centers = np.array([fit.estimated_variables[i]['centroid'].value for i in range(n)])
 
         if not voigt:
@@ -750,7 +759,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, fo
         
         elif voigt:
             g_fwhms = np.array([fit.estimated_variables[i]['G_fwhm'].value for i in range(n)])
-            sigmas = GaussianWidth(g_fwhms)
+            sigmas = VPfit.GaussianWidth(g_fwhms)
 
         b_array.append(DopplerParameter(sigmas, line))
         N_array.append(ColumnDensity(heights, sigmas))
@@ -762,7 +771,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, fo
     if folder:
         plot_spectrum(wavelength_array, flux_array, flux_model, region_pixels, folder)
 
-    return b_array, N_array, ew_array, centers, flux_model
+    return b_array, N_array, ew_array, center_array, flux_model
 
 
 def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
@@ -858,7 +867,7 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 if __name__ == "__main__":
 
     import h5py
-    folder = '/home/sarah/VAMP/plots/'
+    folder = '/home/sarah/VAMP/plots/H1215_'
 
     line = 1036.
     #clouds, wavelength_array = mock_absorption(wavelength_start=line-5., wavelength_end=line+5., n=2)
@@ -866,10 +875,10 @@ if __name__ == "__main__":
     #onesigmaerror = 0.02
     #noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
     
-    data = h5py.File('data/spectrum_pygad_CII1036.h5', 'r')
+    data = h5py.File('data/spectrum_pygad_H1215.h5', 'r')
     
     wavelength = data['wavelength'][:]
     noise = data['noise'][:]
     taus = data['tau'][:]
 
-    b, N, EW, centers, flux_model = fit_spectrum(wavelength, noise, taus, line, voigt=False, folder=folder)
+    b, N, EW, centers, flux_model = fit_spectrum(wavelength, noise, taus, line, voigt=True, folder=folder)
