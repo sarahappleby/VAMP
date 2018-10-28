@@ -38,6 +38,7 @@ from scipy.ndimage.filters import gaussian_filter
 from scipy.signal import argrelextrema
 
 from copy import copy
+import gc
 
 from physics import *
 
@@ -311,7 +312,7 @@ class VPfit():
             n (int): number of absorption profiles to fit
         """
         
-        self.sigma_max = frequency[-1] - frequency[0]
+        self.sigma_max = (frequency[-1] - frequency[0]) / 2.
 
         # always reinitialise profiles, otherwise starts sampling from previously calculated parameter values.
         if(voigt):
@@ -416,6 +417,33 @@ class VPfit():
             self.bic_array.append(self.map.BIC)
             self.red_chi_array.append(self.ReducedChisquared(flux_array, self.total.value, noise_array, freedom))
         finished = True
+
+
+    def chain_covariance(self, n, voigt=False):
+        """
+        Find the covariance matrix of the MCMC chain variables
+        Args:
+            n (int): the number of lines in the region
+            voigt (boolean): switch to use Voigt parameters
+        Returns:
+            cov (numpy array): the covariance matrix
+            cov =   [ var(amplitude),           cov(amplitude, sigma),  cov(amplitude, centroid) ]
+                    [ cov(sigma, amplitude),    var(sigma),             cov(sigma, centroid)     ]
+                    [ cov(centroid, amplitude), cov(centroid, sigma),   var(centroid)            ]
+
+        """
+        cov = np.zeros((n, 3, 3))
+        for i in range(n):
+            amp_samples = self.mcmc.trace('xexp_'+str(i))[:]
+            if not voigt:
+                sigma_samples = self.mcmc.trace('est_sigma_'+str(i))[:]
+            elif voigt:
+                gfwhm_samples = self.mcmc.trace('est_G_'+str(i))[:]
+                sigma_samples = self.GaussianWidth(gfwhm_samples)
+            c_samples = self.mcmc.trace('est_centroid_'+str(i))[:]
+        
+            cov[i] = np.cov(np.array((amp_samples, sigma_samples, c_samples)))
+        return cov 
 
 
 def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
@@ -688,6 +716,7 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
                 finished = True
                 continue
     vpfit_old.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
+    gc.collect()
     return vpfit_old
 
 
@@ -720,12 +749,11 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, fo
     regions, region_pixels = compute_detection_regions(wavelength_array, tau_array, 
                             flux_array, noise_array, min_region_width=2)
 
-    b_array = []
-    N_array = []
-    ew_array = []
-    center_array = []
+    params = {'b': [], 'b_std': [], 'N': [], 'N_std': [], 
+                'EW': [], 'center': [], 'center_std': []}
 
     flux_model = {'total': np.ones(len(flux_array))}
+    
     j = 0
 
     for start, end in region_pixels:
@@ -750,7 +778,6 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, fo
         for k in range(n):
             flux_model['region_'+str(j)][k] = Tau2flux(fit.estimated_profiles[k].value)
 
-
         heights = np.array([fit.estimated_variables[i]['amplitude'].value for i in range(n)])
         centers = np.array([fit.estimated_variables[i]['centroid'].value for i in range(n)])
 
@@ -761,17 +788,27 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, fo
             g_fwhms = np.array([fit.estimated_variables[i]['G_fwhm'].value for i in range(n)])
             sigmas = VPfit.GaussianWidth(g_fwhms)
 
-        b_array.append(DopplerParameter(sigmas, line))
-        N_array.append(ColumnDensity(heights, sigmas))
-        ew_array.append(EquivalentWidth(taus, [waves[0], waves[-1]]))
-        center_array.append((constants['c']['value'] / centers) / 1.e-10)
+        cov = fit.chain_covariance(n, voigt=voigt)
+        std_a = np.sqrt([cov[i][0][0] for i in range(n)])
+        std_s = np.sqrt([cov[i][1][1] for i in range(n)])
+        std_c = np.sqrt([cov[i][2][2] for i in range(n)])
+        cov_as = np.array([cov[i][0][1] for i in range(n)])
+    
+        params['b'].append(DopplerParameter(sigmas, line))
+        params['N'].append(ColumnDensity(heights, sigmas))
+        params['EW'].append(EquivalentWidth(taus, [waves[0], waves[-1]]))
+        params['center'].append(Freq2wave(centers))
+        
+        params['b_std'].append(ErrorB(std_s, line))
+        params['N_std'].append(ErrorN(heights, sigmas, std_a, std_s, cov_as))
+        params['center_std'].append(Errorl(Freq2wave(centers), centers, std_c))
 
         j += 1
 
     if folder:
         plot_spectrum(wavelength_array, flux_array, flux_model, region_pixels, folder)
 
-    return b_array, N_array, ew_array, center_array, flux_model
+    return params, flux_model
 
 
 def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
@@ -867,7 +904,7 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 if __name__ == "__main__":
 
     import h5py
-    folder = '/home/sarah/VAMP/plots/H1215_'
+    folder = '/home/sarah/VAMP/plots/CII1036_'
 
     line = 1036.
     #clouds, wavelength_array = mock_absorption(wavelength_start=line-5., wavelength_end=line+5., n=2)
@@ -875,10 +912,10 @@ if __name__ == "__main__":
     #onesigmaerror = 0.02
     #noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
     
-    data = h5py.File('data/spectrum_pygad_H1215.h5', 'r')
+    data = h5py.File('data/spectrum_pygad_CII1036.h5', 'r')
     
     wavelength = data['wavelength'][:]
     noise = data['noise'][:]
     taus = data['tau'][:]
 
-    b, N, EW, centers, flux_model = fit_spectrum(wavelength, noise, taus, line, voigt=True, folder=folder)
+    params, flux_model = fit_spectrum(wavelength, noise, taus, line, voigt=True, folder=folder)
