@@ -100,6 +100,24 @@ class VPfit():
         return G_fwhm / (2.* np.sqrt(2.*np.log(2.)))
     
 
+    def trunc_normal(self, name, mu, tau, a, b):
+        """
+        Take a sample from a truncated Gaussian distribution with PyMC Normal.
+        Args:
+            name (string): name of the component
+            mu (float): mean of the distribution
+            tau (float): precision of the distribution, which corresponds to 1/sigma**2 (tau > 0).
+            a (float): lower bound of the distribution
+            b (float): upper bound of the distribution
+        """
+        for i in range(1000):
+            x = pymc.Normal(name, mu, tau)
+            if (a < x.value) and (b > x.value):
+                break
+        if (a > x.value) or (b < x.value):
+            raise ValueError('Computational time exceeded.')    
+        return x
+
     @staticmethod
     def Chisquared(observed, expected, noise):
         """
@@ -211,7 +229,6 @@ class VPfit():
 
 
     def initialise_components(self, frequency_array, n, sigma_max):
-        # need to change so that sigma_max is estimated
         """
         Initialise each fitted component of the model in optical depth space. Each component 
         consists of three variables, height, centroid and sigma. These variables are encapsulated 
@@ -402,10 +419,10 @@ class VPfit():
             voigt (Boolean): switch to fit as Voigt profile or Gaussian
             iterations, thin, burn (ints): MCMC parameters
         """
-
+        
         self.bic_array = []
         self.red_chi_array = []
-        for _ in range(3):
+        for i in range(3):
             self.initialise_model(frequency_array, flux_array, n, voigt=voigt)
             self.map = mc.MAP(self.model)
             self.mcmc = mc.MCMC(self.model)
@@ -416,7 +433,7 @@ class VPfit():
             self.map.fit(iterlim=iterations, tol=1e-3)
             self.bic_array.append(self.map.BIC)
             self.red_chi_array.append(self.ReducedChisquared(flux_array, self.total.value, noise_array, freedom))
-        finished = True
+        return
 
 
     def chain_covariance(self, n, voigt=False):
@@ -664,7 +681,7 @@ def estimate_n(flux_array):
 
 
 def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False, 
-                verbose=True, iterations=10000, thin=15, burn=1000):
+                chi_limit=1., verbose=True, iterations=10000, thin=15, burn=1000):
     """
     Fit the line region with n Gaussian/Voigt profiles using a BIC method.
 
@@ -673,6 +690,7 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
         flux_array (numpy array)
         n (int) initial guess for number of profiles
         voigt (Boolean): switch to fit as Voigt profiles or Gaussians
+        chi_limit (float): upper limit for reduced chi squared
         iterations, thin, burn (int): MCMC parameters
     """
     if frequency_array[0] > frequency_array[-1]:
@@ -699,9 +717,9 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
                     print "Old BIC value of {:.2f} is greater than the current {:.2f}.".format(bic_old, np.average(vpfit.bic_array))
                 bic_old = np.average(vpfit.bic_array)
                 vpfit_old = copy(vpfit)
-                if np.average(np.abs(vpfit.red_chi_array)) < 1.:
+                if np.average(vpfit.red_chi_array) < chi_limit:
                     if verbose:
-                        print "Reduced Chi squared is less than 1."
+                        print "Reduced Chi squared is less than {}".format(chi_limit)
                         print "Final n={}".format(n)
                     finished = True
                     continue
@@ -712,16 +730,16 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
             else:
                 if verbose:
                     print "BIC increased with increasing the line number, stopping."
-                    print "Final n={}.".format(n-1)
+                    n -= 1
+                    print "Final n={}.".format(n)
                 finished = True
                 continue
-    vpfit_old.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
     gc.collect()
     return vpfit_old
 
 
 
-def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, folder=None):
+def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, chi_limit=1., folder=None):
     """
     The main function. Takes an input spectrum, splits it into manageable regions, and fits 
     the individual regions using PyMC. Finally calculates the Doppler parameter b, the 
@@ -752,7 +770,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, fo
     params = {'b': [], 'b_std': [], 'N': [], 'N_std': [], 
                 'EW': [], 'center': [], 'center_std': []}
 
-    flux_model = {'total': np.ones(len(flux_array))}
+    flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions))}
     
     j = 0
 
@@ -763,15 +781,30 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, fo
         nu = frequency_array[start:end]
         taus = tau_array[start:end]
 
-        # make initial guess for number of lines in a region
-        n = estimate_n(fluxes)
 
-        # number of degrees of freedom = number of data points + number of parameters 
-        freedom = len(nu) + 3
-        
-        # fit the region
-        fit = region_fit(nu, fluxes, n, noise, freedom, voigt=voigt)
-        n = len(fit.estimated_variables)
+        for i in range(10):
+
+            # make initial guess for number of lines in a region
+            n = estimate_n(fluxes)
+
+            # number of degrees of freedom = number of data points + number of parameters
+            freedom = len(fluxes) + 3*n
+            
+            # fit the region by minimising BIC and chi squared
+            fit = region_fit(nu, fluxes, n, noise, freedom, voigt=voigt, chi_limit=chi_limit)
+            
+            # evaluate overall chi squared
+            n = len(fit.estimated_profiles)
+            freedom = len(fluxes) + 3*n
+            
+            flux_model['chi_squared'][j] = fit.ReducedChisquared(fluxes, fit.total.value, noise, freedom)
+            
+            print 'fit chi squared: ' + str(fit.red_chi_array[-1])
+            print 'Reduced chi squared is {}'.format(flux_model['chi_squared'][j])
+            
+            # if chi squared is sufficiently small, stop there. If not, repeat the region fitting
+            if flux_model['chi_squared'][j] < chi_limit:
+                break
 
         flux_model['total'][start:end] = fit.total.value
         flux_model['region_'+str(j)] = np.ones((n, len(fluxes)))
@@ -904,7 +937,14 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 if __name__ == "__main__":
 
     import h5py
-    folder = '/home/sarah/VAMP/plots/CII1036_'
+    folder = '/disk2/sapple/VAMP/plots/CII1036_'
+    voigt = False
+    
+
+    if voigt == True:
+        folder += 'voigt_'
+    else:
+        folder += 'gauss_'
 
     line = 1036.
     #clouds, wavelength_array = mock_absorption(wavelength_start=line-5., wavelength_end=line+5., n=2)
@@ -918,4 +958,4 @@ if __name__ == "__main__":
     noise = data['noise'][:]
     taus = data['tau'][:]
 
-    params, flux_model = fit_spectrum(wavelength, noise, taus, line, voigt=True, folder=folder)
+    params, flux_model = fit_spectrum(wavelength, noise, taus, line, voigt=voigt, folder=folder)
