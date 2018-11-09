@@ -693,11 +693,12 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
         chi_limit (float): upper limit for reduced chi squared
         iterations, thin, burn (int): MCMC parameters
     """
+    """
     if frequency_array[0] > frequency_array[-1]:
         frequency_array = np.flip(frequency_array, 0)
         flux_array = np.flip(flux_array, 0)
         noise_array = np.flip(noise_array, 0)
-
+    """
     first = True
     finished = False
     if verbose:
@@ -775,14 +776,14 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
     j = 0
 
     for start, end in region_pixels:
-        fluxes = flux_array[start:end]
-        noise = noise_array[start:end]
-        waves = wavelength_array[start:end]
-        nu = frequency_array[start:end]
-        taus = tau_array[start:end]
+        fluxes = np.flip(flux_array[start:end], 0)
+        noise = np.flip(noise_array[start:end], 0)
+        waves = np.flip(wavelength_array[start:end], 0)
+        nu = np.flip(frequency_array[start:end], 0)
+        taus = np.flip(tau_array[start:end], 0)
 
 
-        for i in range(10):
+        for _ in range(10):
 
             # make initial guess for number of lines in a region
             n = estimate_n(fluxes)
@@ -806,10 +807,10 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             if flux_model['chi_squared'][j] < chi_limit:
                 break
 
-        flux_model['total'][start:end] = fit.total.value
+        flux_model['total'][start:end] = np.flip(fit.total.value, 0)
         flux_model['region_'+str(j)] = np.ones((n, len(fluxes)))
         for k in range(n):
-            flux_model['region_'+str(j)][k] = Tau2flux(fit.estimated_profiles[k].value)
+            flux_model['region_'+str(j)][k] = np.flip(Tau2flux(fit.estimated_profiles[k].value), 0)
 
         heights = np.array([fit.estimated_variables[i]['amplitude'].value for i in range(n)])
         centers = np.array([fit.estimated_variables[i]['centroid'].value for i in range(n)])
