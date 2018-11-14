@@ -822,6 +822,10 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             g_fwhms = np.array([fit.estimated_variables[i]['G_fwhm'].value for i in range(n)])
             sigmas = VPfit.GaussianWidth(g_fwhms)
 
+        flux_model['height'] = heights
+        flux_model['centers'] = centers
+        flux_model['sigmas'] = sigmas
+
         cov = fit.chain_covariance(n, voigt=voigt)
         std_a = np.sqrt([cov[i][0][0] for i in range(n)])
         std_s = np.sqrt([cov[i][1][1] for i in range(n)])
