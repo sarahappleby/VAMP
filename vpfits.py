@@ -789,14 +789,14 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             n = estimate_n(fluxes)
 
             # number of degrees of freedom = number of data points + number of parameters
-            freedom = len(fluxes) + 3*n
+            freedom = len(fluxes) - 3*n
             
             # fit the region by minimising BIC and chi squared
             fit = region_fit(nu, fluxes, n, noise, freedom, voigt=voigt, chi_limit=chi_limit)
             
             # evaluate overall chi squared
             n = len(fit.estimated_profiles)
-            freedom = len(fluxes) + 3*n
+            freedom = len(fluxes) - 3*n
             
             flux_model['chi_squared'][j] = fit.ReducedChisquared(fluxes, fit.total.value, noise, freedom)
             
@@ -938,7 +938,8 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 if __name__ == "__main__":
 
     import h5py
-    folder = '/disk2/sapple/VAMP/plots/CII1036_'
+    # change this to relative paths
+    folder = '/home/sarah/VAMP/plots/H1215_'
     voigt = False
     
 
@@ -947,13 +948,13 @@ if __name__ == "__main__":
     else:
         folder += 'gauss_'
 
-    line = 1036.
+    line = 1215.
     #clouds, wavelength_array = mock_absorption(wavelength_start=line-5., wavelength_end=line+5., n=2)
 
     #onesigmaerror = 0.02
     #noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
     
-    data = h5py.File('data/spectrum_pygad_CII1036.h5', 'r')
+    data = h5py.File('data/spectrum_pygad_H1215.h5', 'r')
     
     wavelength = data['wavelength'][:]
     noise = data['noise'][:]
