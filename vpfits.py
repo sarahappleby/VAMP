@@ -822,7 +822,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             g_fwhms = np.array([fit.estimated_variables[i]['G_fwhm'].value for i in range(n)])
             sigmas = VPfit.GaussianWidth(g_fwhms)
 
-        flux_model['height'] = heights
+        flux_model['amplitude'] = heights
         flux_model['centers'] = centers
         flux_model['sigmas'] = sigmas
 
@@ -831,6 +831,11 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         std_s = np.sqrt([cov[i][1][1] for i in range(n)])
         std_c = np.sqrt([cov[i][2][2] for i in range(n)])
         cov_as = np.array([cov[i][0][1] for i in range(n)])
+
+        flux_model['std_a'] = std_a
+        flux_model['std_s'] = std_s
+        flux_model['std_c'] = std_c
+        flux_model['cov_as'] = cov_as
     
         params['b'].append(DopplerParameter(sigmas, line))
         params['N'].append(ColumnDensity(heights, sigmas))
