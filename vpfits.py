@@ -693,12 +693,6 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
         chi_limit (float): upper limit for reduced chi squared
         iterations, thin, burn (int): MCMC parameters
     """
-    """
-    if frequency_array[0] > frequency_array[-1]:
-        frequency_array = np.flip(frequency_array, 0)
-        flux_array = np.flip(flux_array, 0)
-        noise_array = np.flip(noise_array, 0)
-    """
     first = True
     finished = False
     if verbose:
@@ -761,7 +755,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         centers (numpy array): Centroids of absorption lines, in Angstroms.
     """
 
-    frequency_array = constants['c']['value'] / (wavelength_array*1.e-10) 
+    frequency_array = Wave2freq(wavelength_array)
     flux_array = Tau2flux(tau_array) + noise_array 
 
     # identify regions to fit in the spectrum
@@ -771,7 +765,9 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
     params = {'b': [], 'b_std': [], 'N': [], 'N_std': [], 
                 'EW': [], 'center': [], 'center_std': []}
 
-    flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions))}
+    flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)),     
+                'amplitude': [], 'sigmas': [], 'centers': [], 
+                'std_a': [], 'std_s': [], 'std_c': [], 'cov_as': []}
     
     j = 0
 
@@ -800,7 +796,6 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             
             flux_model['chi_squared'][j] = fit.ReducedChisquared(fluxes, fit.total.value, noise, freedom)
             
-            print 'fit chi squared: ' + str(fit.red_chi_array[-1])
             print 'Reduced chi squared is {}'.format(flux_model['chi_squared'][j])
             
             # if chi squared is sufficiently small, stop there. If not, repeat the region fitting
@@ -822,9 +817,9 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             g_fwhms = np.array([fit.estimated_variables[i]['G_fwhm'].value for i in range(n)])
             sigmas = VPfit.GaussianWidth(g_fwhms)
 
-        flux_model['amplitude'] = heights
-        flux_model['centers'] = centers
-        flux_model['sigmas'] = sigmas
+        flux_model['amplitude'].append(heights)
+        flux_model['centers'].append(centers)
+        flux_model['sigmas'].append(sigmas)
 
         cov = fit.chain_covariance(n, voigt=voigt)
         std_a = np.sqrt([cov[i][0][0] for i in range(n)])
@@ -832,11 +827,11 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         std_c = np.sqrt([cov[i][2][2] for i in range(n)])
         cov_as = np.array([cov[i][0][1] for i in range(n)])
 
-        flux_model['std_a'] = std_a
-        flux_model['std_s'] = std_s
-        flux_model['std_c'] = std_c
-        flux_model['cov_as'] = cov_as
-    
+        flux_model['std_a'].append(std_a)
+        flux_model['std_s'].append(std_s)
+        flux_model['std_c'].append(std_c)
+        flux_model['cov_as'].append(cov_as)
+
         params['b'].append(DopplerParameter(sigmas, line))
         params['N'].append(ColumnDensity(heights, sigmas))
         params['EW'].append(EquivalentWidth(taus, [waves[0], waves[-1]]))
@@ -844,7 +839,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         
         params['b_std'].append(ErrorB(std_s, line))
         params['N_std'].append(ErrorN(heights, sigmas, std_a, std_s, cov_as))
-        params['center_std'].append(Errorl(Freq2wave(centers), centers, std_c))
+        params['center_std'].append(Errorl(std_c))
 
         j += 1
 
@@ -944,6 +939,9 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 
     return
 
+def write_ascii(params, flux_model, filename):
+    pass
+
 if __name__ == "__main__":
 
     import h5py
@@ -970,3 +968,4 @@ if __name__ == "__main__":
     taus = data['tau'][:]
 
     params, flux_model = fit_spectrum(wavelength, noise, taus, line, voigt=voigt, folder=folder)
+

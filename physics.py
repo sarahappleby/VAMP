@@ -1,11 +1,11 @@
 import numpy as np
 
 constants = {'c': {'value': 2.98e8, 'units': 'm/s', 'def': 'Speed of light in a vacuum'}, 
-            'sigma0': {'value': 2.36e-6, 'units': 'm**2 / s', 'def': 'Cross section for absorption'}}
+            'sigma0': {'value': 0.0263, 'units': 'cm**2 / s', 'def': 'Cross section for absorption'}}
 
 def ColumnDensity(amplitude, sigma):
     """
-    Find the column density of an absorption line.
+    Find the column density of an absorption line in cm**-2.
     
     Args:
         amplitude (numpy array): the amplitudes of the profile fit in frequency space.
@@ -16,14 +16,15 @@ def ColumnDensity(amplitude, sigma):
 
 def DopplerParameter(sigma, line):
     """
-    Find the Doppler b parameter of an absorption line.
+    Find the Doppler b parameter of an absorption line in km**-1.
 
     Args:
         sigma (numpy array): the std deviation of the Gaussian in frequency space.
         line (float): the rest wavelength of the absorption line in Angstroms
     """
     # convert line position from Angstroms to m.
-    return line*1.e-13*sigma / np.sqrt(2)
+    line *= 1.e-10
+    return (line*sigma / np.sqrt(2))*1.e-3
 
 def EquivalentWidth(taus, edges):
     """
@@ -60,20 +61,18 @@ def ErrorN(amplitude, sigma, std_a, std_s, cov_as):
         cov_as (numpy array): the covariance of amplitude and width
     """
     prefactor = np.sqrt(2.*np.pi) / constants['sigma0']['value']
-    amp_part = (std_a / amplitude)**2
-    sig_part = (std_s / sigma)**2
-    cov_part = 2*cov_as / (amplitude*sigma)
+    amp_part = sigma**2 * std_a **2
+    sig_part = amplitude**2 * std_s**2
+    cov_part = 2*cov_as * amplitude * sigma
     return prefactor * np.sqrt(amp_part + sig_part + cov_part)
 
-def Errorl(centroid_l, centroid_f, std_c, ):
+def Errorl(std_f):
     """
     Evaluate the standard deviation on the line centroid position.
     Args:
-        centroid_l (numpy array): the positions of the profile fit lines in wavelength space.
-        centroid_f (numpy array): the positions of the profile fit lines in frequency space.
-        std_c (numpy array): the standard deviations of the line positions
+        std_f (numpy array): the standard deviations of the line positions in frequency space
     """
-    return centroid_l*std_c / centroid_f
+    return constants['c']['value']*std_f / 1.e-10
 
 def Tau2flux(tau):
     """
@@ -98,3 +97,9 @@ def Freq2wave(frequency):
     Convert frequency to wavelength in Angstroms
     """
     return (constants['c']['value'] / frequency) / 1.e-10
+
+def Wave2freq(wavelength):
+    """
+    Convert wavelength in Angstroms to frequency
+    """
+    return constants['c']['value'] / (wavelength*1.e-10)
