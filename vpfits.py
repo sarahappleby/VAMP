@@ -762,12 +762,12 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
     regions, region_pixels = compute_detection_regions(wavelength_array, tau_array, 
                             flux_array, noise_array, min_region_width=2)
 
-    params = {'b': [], 'b_std': [], 'N': [], 'N_std': [], 
-                'EW': [], 'center': [], 'center_std': []}
+    params = {'b': np.array([]), 'b_std': np.array([]), 'N': np.array([]), 'N_std': np.array([]), 
+                'EW': np.array([])}
 
     flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)),     
-                'amplitude': [], 'sigmas': [], 'centers': [], 
-                'std_a': [], 'std_s': [], 'std_c': [], 'cov_as': []}
+                'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 
+                'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([])}
     
     j = 0
 
@@ -816,31 +816,30 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         elif voigt:
             g_fwhms = np.array([fit.estimated_variables[i]['G_fwhm'].value for i in range(n)])
             sigmas = VPfit.GaussianWidth(g_fwhms)
-
-        flux_model['amplitude'].append(heights)
-        flux_model['centers'].append(centers)
-        flux_model['sigmas'].append(sigmas)
-
+        
         cov = fit.chain_covariance(n, voigt=voigt)
         std_a = np.sqrt([cov[i][0][0] for i in range(n)])
         std_s = np.sqrt([cov[i][1][1] for i in range(n)])
         std_c = np.sqrt([cov[i][2][2] for i in range(n)])
         cov_as = np.array([cov[i][0][1] for i in range(n)])
 
-        flux_model['std_a'].append(std_a)
-        flux_model['std_s'].append(std_s)
-        flux_model['std_c'].append(std_c)
-        flux_model['cov_as'].append(cov_as)
+        flux_model['amplitude'] = np.append(flux_model['amplitude'], heights)
+        flux_model['centers'] = np.append(flux_model['centers'], centers)
+        flux_model['sigmas'] = np.append(flux_model['sigmas'], sigmas)
 
-        params['b'].append(DopplerParameter(sigmas, line))
-        params['N'].append(ColumnDensity(heights, sigmas))
-        params['EW'].append(EquivalentWidth(taus, [waves[0], waves[-1]]))
-        params['center'].append(Freq2wave(centers))
+        flux_model['std_a'] = np.append(flux_model['std_a'], std_a)
+        flux_model['std_s'] = np.append(flux_model['std_s'], std_s)
+        flux_model['std_c'] = np.append(flux_model['std_c'], std_c)
+        flux_model['cov_as'] = np.append(flux_model['cov_as'], cov_as)
+
+        params['b'] = np.append(params['b'], DopplerParameter(sigmas, line))
+        params['N'] = np.append(params['N'], ColumnDensity(heights, sigmas))
+        for k in range(n):
+            params['EW'] = np.append(params['EW'], EquivalentWidth(fit.estimated_profiles[k].value, [waves[0], waves[-1]]))
         
-        params['b_std'].append(ErrorB(std_s, line))
-        params['N_std'].append(ErrorN(heights, sigmas, std_a, std_s, cov_as))
-        params['center_std'].append(Errorl(std_c))
-
+        params['b_std'] = np.append(params['b_std'], ErrorB(std_s, line))
+        params['N_std'] = np.append(params['N_std'], ErrorN(heights, sigmas, std_a, std_s, cov_as))
+        
         j += 1
 
     if folder:
@@ -939,33 +938,48 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 
     return
 
-def write_ascii(params, flux_model, filename):
-    pass
+def write_ascii(params, filename):
+    """
+    Save ascii file with physical parameters from fit
+    Args:
+        params (dict): output of fit_spectrum
+        filename (string): name of ascii file
+    """
 
-if __name__ == "__main__":
+    import astropy.io.ascii as ascii
+    ascii.write(params, filename, formats={'N': '%.6g', 'N_std': '%.6g', 'EW': '%.6g', 'b': '%.6g', 'b_std': '%.6g'})
 
-    import h5py
-    # change this to relative paths
-    folder = '/home/sarah/VAMP/plots/H1215_'
-    voigt = False
-    
+if __name__ == "__main__":  
 
-    if voigt == True:
-        folder += 'voigt_'
+    import argparse
+    parser = argparse.ArgumentParser(description='Voigt Automatic MCMC Profiles (VAMP)')
+    parser.add_argument('data_file',
+                        help='Input file with absorption spectrum data from Pygad.')
+    parser.add_argument('line',
+                        help='Wavelength of the absorption line in Angstroms.', 
+                        type=float)
+    parser.add_argument('--output_folder',
+                        help='Folder to save output.', default='./')
+    parser.add_argument('--voigt',
+                        help='Fit Voigt profile. Default: False', 
+                        action='store_true')
+    args = parser.parse_args()
+
+    if args.voigt == True:
+        args.output_folder += 'vamp_voigt_'
     else:
-        folder += 'gauss_'
+        args.output_folder += 'vamp_gauss_'
 
-    line = 1215.
     #clouds, wavelength_array = mock_absorption(wavelength_start=line-5., wavelength_end=line+5., n=2)
 
     #onesigmaerror = 0.02
     #noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
-    
-    data = h5py.File('data/spectrum_pygad_H1215.h5', 'r')
+    import h5py
+    data = h5py.File(args.data_file, 'r')
     
     wavelength = data['wavelength'][:]
     noise = data['noise'][:]
     taus = data['tau'][:]
 
-    params, flux_model = fit_spectrum(wavelength, noise, taus, line, voigt=voigt, folder=folder)
-
+    params, flux_model = fit_spectrum(wavelength, noise, taus, args.line, voigt=args.voigt, folder=args.output_folder)
+    write_ascii(params, args.output_folder+'params.dat')
