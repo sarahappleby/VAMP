@@ -538,15 +538,13 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
     return clouds, wavelength_array
 
 
-# dev: maybe change so input flux, go to tau method for tau
-def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width=2, 
-                            N_sigma=4.0, tau_lim=0.01, extend=False):
+def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=2, 
+                            N_sigma=4.0, extend=False):
     """
     Finds detection regions above some detection threshold and minimum width.
 
     Args:
         wavelengths (numpy array)
-        taus (numpy array): optical depth values at each wavelength
         fluxes (numpy array): flux values at each wavelength    
         noise (numpy array): noise value at each wavelength 
         min_region_width (int): minimum width of a detection region (pixels)
@@ -607,9 +605,9 @@ def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width
     start = 0
     region_endpoints = []
     for i in range(num_pixels):
-        if start == 0 and det_ratio[i] > N_sigma and taus[i] > tau_lim:
+        if start == 0 and det_ratio[i] > N_sigma and fluxes[i] < 1.0:
             start = i
-        elif start != 0 and (det_ratio[i] < N_sigma or taus[i] < tau_lim):
+        elif start != 0 and (det_ratio[i] < N_sigma or fluxes[i] > 1.0):
             if (i - start) > min_region_width:
                 end = i
                 region_endpoints.append([start, end])
@@ -624,12 +622,12 @@ def compute_detection_regions(wavelengths, taus, fluxes, noise, min_region_width
         for reg in region_endpoints:
             start = reg[0]
             i = start
-            while i > 0 and taus[i] > tau_lim:
+            while i > 0 and fluxes[i] < 1.0:
                 i -= 1
             start_new = i
             end = reg[1]
             j = end
-            while j < (len(fluxes)-1) and taus[j] < tau_lim:
+            while j < (len(fluxes)-1) and fluxes[j] < 1.0:
                 j += 1
             end_new = j
             regions_expanded.append([start_new, end_new])
@@ -734,7 +732,7 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
 
 
 
-def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, chi_limit=1., folder=None):
+def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, chi_limit=1.5, folder=None):
     """
     The main function. Takes an input spectrum, splits it into manageable regions, and fits 
     the individual regions using PyMC. Finally calculates the Doppler parameter b, the 
@@ -759,7 +757,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
     flux_array = Tau2flux(tau_array) + noise_array 
 
     # identify regions to fit in the spectrum
-    regions, region_pixels = compute_detection_regions(wavelength_array, tau_array, 
+    regions, region_pixels = compute_detection_regions(wavelength_array, 
                             flux_array, noise_array, min_region_width=2)
 
     params = {'b': np.array([]), 'b_std': np.array([]), 'N': np.array([]), 'N_std': np.array([]), 
@@ -796,7 +794,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             
             flux_model['chi_squared'][j] = fit.ReducedChisquared(fluxes, fit.total.value, noise, freedom)
             
-            print 'Reduced chi squared is {}'.format(flux_model['chi_squared'][j])
+            print 'Reduced chi squared is {:.2f}'.format(flux_model['chi_squared'][j])
             
             # if chi squared is sufficiently small, stop there. If not, repeat the region fitting
             if flux_model['chi_squared'][j] < chi_limit:
@@ -893,7 +891,7 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 
     plt.xlabel('Wavelength (A)')
     plt.ylabel('Flux')
-    plt.savefig(folder+'vamp_fit.png')
+    plt.savefig(folder+'fit.png')
     plt.clf()
 
     fig, ax = plt.subplots(N, figsize=(15,15))
@@ -913,7 +911,7 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 
     plt.xlabel('Wavelength (A)')
     plt.ylabel('Flux')
-    plt.savefig(folder+'vamp_components.png')
+    plt.savefig(folder+'components.png')
     plt.clf()    
 
     fig, ax = plt.subplots(N, figsize=(15,15))
@@ -933,7 +931,7 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 
     plt.xlabel('Wavelength (A)')
     plt.ylabel('Flux')
-    plt.savefig(folder+'vamp_residuals.png')
+    plt.savefig(folder+'residuals.png')
     plt.clf()
 
     return
@@ -965,10 +963,13 @@ if __name__ == "__main__":
                         action='store_true')
     args = parser.parse_args()
 
+    name = args.data_file.split('/', -1)[-1]
+    name = name[:name.find('.')]
+
     if args.voigt == True:
-        args.output_folder += 'vamp_voigt_'
+        args.output_folder += name + '_voigt_'
     else:
-        args.output_folder += 'vamp_gauss_'
+        args.output_folder += name + '_gauss_'
 
     #clouds, wavelength_array = mock_absorption(wavelength_start=line-5., wavelength_end=line+5., n=2)
 
