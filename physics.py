@@ -98,3 +98,11 @@ def Freq2wave(frequency):
     Convert frequency to wavelength in Angstroms
     """
     return (constants['c']['value'] / frequency) / 1.e-10
+
+def Wave2red(wave, rest_wave):
+    """
+    Args:
+        wave (numpy array): array of wavelengths
+        wave_rest (float): rest wavelength
+    """
+    return (wave - rest_wave) / rest_wave
