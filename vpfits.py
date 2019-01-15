@@ -4,6 +4,8 @@ VPfit
 Fit Voigt Profiles using MCMC. Uses bayesian model selection to pick the appropriate number 
 of profiles for a given absorption.
 
+The main method for fitting absorption spectra is 'fit_spectrum'. 
+
 The main class containing the fitting functionality is `VPfit`. A mock absorption generator, 
 `mock_absorption`, is also included for demonstration.
 
@@ -404,7 +406,7 @@ class VPfit():
 
 
     def find_bic(self, frequency_array, flux_array, n, noise_array, freedom, voigt=False, 
-                iterations=10000, thin=15, burn=1000):
+                iterations=3000, thin=15, burn=300):
         """
         Initialise the Voigt model and run the MCMC fitting for a particular number of 
         regions and return the Bayesian Information Criterion. Used to identify the 
@@ -427,9 +429,9 @@ class VPfit():
             self.map = mc.MAP(self.model)
             self.mcmc = mc.MCMC(self.model)
             self.map.fit(iterlim=iterations, tol=1e-3)
-            self.mcmc.sample(iter=2000, burn=burn, thin=thin, progress_bar=False)
+            self.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
             self.map.fit(iterlim=iterations, tol=1e-3)
-            self.mcmc.sample(iter=2000, burn=burn, thin=thin, progress_bar=False)
+            self.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
             self.map.fit(iterlim=iterations, tol=1e-3)
             self.bic_array.append(self.map.BIC)
             self.red_chi_array.append(self.ReducedChisquared(flux_array, self.total.value, noise_array, freedom))
@@ -679,7 +681,7 @@ def estimate_n(flux_array):
 
 
 def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False, 
-                chi_limit=1., verbose=True, iterations=10000, thin=15, burn=1000):
+                chi_limit=1., verbose=True, iterations=3000, thin=15, burn=300):
     """
     Fit the line region with n Gaussian/Voigt profiles using a BIC method.
 
@@ -697,7 +699,7 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
         print "Setting initial number of lines to: {}".format(n)
     while not finished:
         vpfit = VPfit()
-        vpfit.find_bic(frequency_array, flux_array, n, noise_array, freedom, voigt=voigt)
+        vpfit.find_bic(frequency_array, flux_array, n, noise_array, freedom, voigt=voigt, iterations=iterations, burn=burn)
         if first:
             first = False
             n += 1
@@ -936,16 +938,22 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 
     return
 
-def write_ascii(params, filename):
+def write_file(params, filename, format):
     """
-    Save ascii file with physical parameters from fit
+    Save file with physical parameters from fit
     Args:
         params (dict): output of fit_spectrum
         filename (string): name of ascii file
+        format (string): file format to save. Can be ascii or h5.
     """
+    if format == 'ascii':
+        import astropy.io.ascii as ascii
+        ascii.write(params, filename, formats={'N': '%.6g', 'N_std': '%.6g', 'EW': '%.6g', 'b': '%.6g', 'b_std': '%.6g'})
+    if format == 'h5':
+        with h5py.File(filename, 'w') as f:
+            for p in params.keys():
+                f.create_dataset(p, data=np.array(params[p]))
 
-    import astropy.io.ascii as ascii
-    ascii.write(params, filename, formats={'N': '%.6g', 'N_std': '%.6g', 'EW': '%.6g', 'b': '%.6g', 'b_std': '%.6g'})
 
 if __name__ == "__main__":  
 
