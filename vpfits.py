@@ -406,7 +406,7 @@ class VPfit():
 
 
     def find_bic(self, frequency_array, flux_array, n, noise_array, freedom, voigt=False, 
-                iterations=3000, thin=15, burn=300):
+                iterations=3000, thin=15, burn=300, thorough=False):
         """
         Initialise the Voigt model and run the MCMC fitting for a particular number of 
         regions and return the Bayesian Information Criterion. Used to identify the 
@@ -428,9 +428,10 @@ class VPfit():
             self.initialise_model(frequency_array, flux_array, n, voigt=voigt)
             self.map = mc.MAP(self.model)
             self.mcmc = mc.MCMC(self.model)
-            self.map.fit(iterlim=iterations, tol=1e-3)
-            self.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
-            self.map.fit(iterlim=iterations, tol=1e-3)
+            if thorough:
+                self.map.fit(iterlim=iterations, tol=1e-3)
+                self.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
+                self.map.fit(iterlim=iterations, tol=1e-3)
             self.mcmc.sample(iter=iterations, burn=burn, thin=thin, progress_bar=False)
             self.map.fit(iterlim=iterations, tol=1e-3)
             self.bic_array.append(self.map.BIC)
