@@ -24,7 +24,6 @@ import pandas as pd
 
 import pymc as mc
 
-import matplotlib.pylab as pylab
 import matplotlib.pyplot as plt
 
 # Voigt modules
@@ -164,7 +163,7 @@ class VPfit():
         if not end_pix:
             end_pix = len(wavelength_array)
 
-        f, (ax1, ax2, ax3) = pylab.subplots(3, sharex=True, sharey=False, figsize=(10,10))
+        f, (ax1, ax2, ax3) = plt.subplots(3, sharex=True, sharey=False, figsize=(10,10))
 
         ax1.plot(wavelength_array, (flux_array - self.total.value) / onesigmaerror)
         ax1.hlines(1, wavelength_array[0], wavelength_array[-1], color='red', linestyles='-')
@@ -208,9 +207,9 @@ class VPfit():
         ax3.set_xlabel("$ \lambda (\AA)$")
 
         if filename:
-            pylab.savefig(filename)
+            plt.savefig(filename)
         else:
-            pylab.show()
+            plt.show()
 
 
     def find_local_minima(self, f_array, window=101):
@@ -521,7 +520,7 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
         noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
         flux_array = Tau2flux(sum(clouds['tau'])) + noise
 
-        f, (ax1, ax2) = pylab.subplots(2, sharex=True, sharey=False)
+        f, (ax1, ax2) = plt.subplots(2, sharex=True, sharey=False)
 
         ax1.plot(wavelength_array, sum(clouds['tau']), color='black', label='combined', lw=2)
         for c in range(len(clouds)):
@@ -536,7 +535,7 @@ def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
         ax2.set_xlabel("$\lambda (\AA)$")
         ax2.set_ylim(0, 1.1)
 
-        pylab.show()
+        plt.show()
 
     return clouds, wavelength_array
 
@@ -803,6 +802,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             if flux_model['chi_squared'][j] < chi_limit:
                 break
 
+        print '\n'
         flux_model['total'][start:end] = np.flip(fit.total.value, 0)
         flux_model['region_'+str(j)] = np.ones((n, len(fluxes)))
         for k in range(n):
@@ -951,7 +951,7 @@ def write_file(params, filename, format):
         import astropy.io.ascii as ascii
         ascii.write(params, filename, formats={'N': '%.6g', 'N_std': '%.6g', 'EW': '%.6g', 'b': '%.6g', 'b_std': '%.6g'})
     if format == 'h5':
-        with h5py.File(filename, 'w') as f:
+        with h5py.File(filename, 'a') as f:
             for p in params.keys():
                 f.create_dataset(p, data=np.array(params[p]))
 
@@ -992,4 +992,5 @@ if __name__ == "__main__":
     taus = data['tau'][:]
 
     params, flux_model = fit_spectrum(wavelength, noise, taus, args.line, voigt=args.voigt, folder=args.output_folder)
-    write_ascii(params, args.output_folder+'params.dat')
+    write_file(params, args.output_folder+'params.dat', 'h5')
+
