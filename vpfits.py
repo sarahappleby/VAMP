@@ -734,7 +734,7 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
 
 
 
-def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, chi_limit=1.5, folder=None):
+def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, chi_limit=1.5, folder=None, mcmc_cov=False, get_b_std=True):
     """
     The main function. Takes an input spectrum, splits it into manageable regions, and fits 
     the individual regions using PyMC. Finally calculates the Doppler parameter b, the 
@@ -747,6 +747,8 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         line (float): the rest wavelength of the absorption line in Angstroms
         voigt (boolean): switch to fit Voigt profile instead of Gaussian. Default: True.
         folder (string): if plotting the fits and saving them, provide a directory. Default: None.
+        mcmc_cov (boolean): switch to do error propogation from the mcmc chain. Default: False
+        get_b_std (boolean): switch to find the standard deviation of b from the mcmc chain. Default: True.
 
     Returns:
         b (numpy array): Doppler parameter, in km/s.
@@ -818,28 +820,35 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             g_fwhms = np.array([fit.estimated_variables[i]['G_fwhm'].value for i in range(n)])
             sigmas = VPfit.GaussianWidth(g_fwhms)
         
-        cov = fit.chain_covariance(n, voigt=voigt)
-        std_a = np.sqrt([cov[i][0][0] for i in range(n)])
-        std_s = np.sqrt([cov[i][1][1] for i in range(n)])
-        std_c = np.sqrt([cov[i][2][2] for i in range(n)])
-        cov_as = np.array([cov[i][0][1] for i in range(n)])
-
         flux_model['amplitude'] = np.append(flux_model['amplitude'], heights)
         flux_model['centers'] = np.append(flux_model['centers'], centers)
         flux_model['sigmas'] = np.append(flux_model['sigmas'], sigmas)
 
-        flux_model['std_a'] = np.append(flux_model['std_a'], std_a)
-        flux_model['std_s'] = np.append(flux_model['std_s'], std_s)
-        flux_model['std_c'] = np.append(flux_model['std_c'], std_c)
-        flux_model['cov_as'] = np.append(flux_model['cov_as'], cov_as)
+        if mcmc_cov:
+            cov = fit.chain_covariance(n, voigt=voigt)
+            std_a = np.sqrt([cov[i][0][0] for i in range(n)])
+            std_s = np.sqrt([cov[i][1][1] for i in range(n)])
+            std_c = np.sqrt([cov[i][2][2] for i in range(n)])
+            cov_as = np.array([cov[i][0][1] for i in range(n)])
+
+            flux_model['std_a'] = np.append(flux_model['std_a'], std_a)
+            flux_model['std_s'] = np.append(flux_model['std_s'], std_s)
+            flux_model['std_c'] = np.append(flux_model['std_c'], std_c)
+            flux_model['cov_as'] = np.append(flux_model['cov_as'], cov_as)
+
+            params['N_std'] = np.append(params['N_std'], ErrorN(heights, sigmas, std_a, std_s, cov_as))
+        
+        elif get_b_std:
+            stats = fit.mcmc.stats()
+            std_s = np.array([stats['est_sigma_'+str(i)]['standard deviation'] for i in range(n)])
+            flux_model['std_s'] = np.append(flux_model['std_s'], std_s)
+
+            params['b_std'] = np.append(params['b_std'], ErrorB(std_s, line))
 
         params['b'] = np.append(params['b'], DopplerParameter(sigmas, line))
         params['N'] = np.append(params['N'], ColumnDensity(heights, sigmas))
         for k in range(n):
             params['EW'] = np.append(params['EW'], EquivalentWidth(fit.estimated_profiles[k].value, [waves[0], waves[-1]]))
-        
-        params['b_std'] = np.append(params['b_std'], ErrorB(std_s, line))
-        params['N_std'] = np.append(params['N_std'], ErrorN(heights, sigmas, std_a, std_s, cov_as))
         
         j += 1
 
