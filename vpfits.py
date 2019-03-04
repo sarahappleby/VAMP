@@ -807,13 +807,12 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         print '\n'
         flux_model['total'][start:end] = np.flip(fit.total.value, 0)
 
-        flux_model['region_'+str(j)] = {}
-        flux_model['region_'+str(j)]['wave'] = np.flip(waves, 0)
+        flux_model['region_'+str(j)+'_wave'] = np.flip(waves, 0)
 
 
-        flux_model['region_'+str(j)]['flux'] = np.ones((n, len(fluxes)))
+        flux_model['region_'+str(j)+'_flux'] = np.ones((n, len(fluxes)))
         for k in range(n):
-            flux_model['region_'+str(j)]['flux'][k] = np.flip(Tau2flux(fit.estimated_profiles[k].value), 0)
+            flux_model['region_'+str(j)+'_flux'][k] = np.flip(Tau2flux(fit.estimated_profiles[k].value), 0)
 
         heights = np.array([fit.estimated_variables[i]['amplitude'].value for i in range(n)])
         centers = np.array([fit.estimated_variables[i]['centroid'].value for i in range(n)])
@@ -920,9 +919,9 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
 
         for i in range(len(regions)):
             start, end = regions[i]
-            region_data = flux_model['region_'+str(i)]
-            for j in range(len(region_data['flux'])):
-                ax[n].plot(wavelength_array[start:end], region_data['flux'][j], c='green')
+            region_data = flux_model['region_'+str(i)+'_flux']
+            for j in range(len(region_data)):
+                ax[n].plot(wavelength_array[start:end], region_data[j], c='green')
             plot_bracket(wavelength_array[start], ax[n], 'left')
             plot_bracket(wavelength_array[end], ax[n], 'right')
 
@@ -1015,5 +1014,5 @@ if __name__ == "__main__":
 
     params, flux_model = fit_spectrum(wavelength, noise, taus, args.line, voigt=args.voigt, folder=args.output_folder)
     write_file(params, args.output_folder+'params.h5', 'h5')
-    write_file(params, args.output_folder+'flux_model.h5', 'h5')
+    write_file(flux_model, args.output_folder+'flux_model.h5', 'h5')
 
