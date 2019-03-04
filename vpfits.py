@@ -765,9 +765,9 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
                             flux_array, noise_array, min_region_width=2)
 
     params = {'b': np.array([]), 'b_std': np.array([]), 'N': np.array([]), 'N_std': np.array([]), 
-                'EW': np.array([])}
+                'EW': np.array([]), 'centers': np.array([])}
 
-    flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)),     
+    flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)), 'region_pixels': region_pixels,
                 'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 
                 'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([])}
     
@@ -806,9 +806,14 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
 
         print '\n'
         flux_model['total'][start:end] = np.flip(fit.total.value, 0)
-        flux_model['region_'+str(j)] = np.ones((n, len(fluxes)))
+
+        flux_model['region_'+str(j)] = {}
+        flux_model['region_'+str(j)]['wave'] = np.flip(waves, 0)
+
+
+        flux_model['region_'+str(j)]['flux'] = np.ones((n, len(fluxes)))
         for k in range(n):
-            flux_model['region_'+str(j)][k] = np.flip(Tau2flux(fit.estimated_profiles[k].value), 0)
+            flux_model['region_'+str(j)]['flux'][k] = np.flip(Tau2flux(fit.estimated_profiles[k].value), 0)
 
         heights = np.array([fit.estimated_variables[i]['amplitude'].value for i in range(n)])
         centers = np.array([fit.estimated_variables[i]['centroid'].value for i in range(n)])
@@ -825,6 +830,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         flux_model['sigmas'] = np.append(flux_model['sigmas'], sigmas)
 
         if mcmc_cov:
+
             cov = fit.chain_covariance(n, voigt=voigt)
             std_a = np.sqrt([cov[i][0][0] for i in range(n)])
             std_s = np.sqrt([cov[i][1][1] for i in range(n)])
@@ -847,6 +853,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
 
         params['b'] = np.append(params['b'], DopplerParameter(sigmas, line))
         params['N'] = np.append(params['N'], ColumnDensity(heights, sigmas))
+        params['centers'] = np.append(params['centers'], centers)
         for k in range(n):
             params['EW'] = np.append(params['EW'], EquivalentWidth(fit.estimated_profiles[k].value, [waves[0], waves[-1]]))
         
@@ -914,8 +921,8 @@ def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
         for i in range(len(regions)):
             start, end = regions[i]
             region_data = flux_model['region_'+str(i)]
-            for j in range(len(region_data)):
-                ax[n].plot(wavelength_array[start:end], region_data[j], c='green')
+            for j in range(len(region_data['flux'])):
+                ax[n].plot(wavelength_array[start:end], region_data['flux'][j], c='green')
             plot_bracket(wavelength_array[start], ax[n], 'left')
             plot_bracket(wavelength_array[end], ax[n], 'right')
 
@@ -958,7 +965,13 @@ def write_file(params, filename, format):
     """
     if format == 'ascii':
         import astropy.io.ascii as ascii
-        ascii.write(params, filename, formats={'N': '%.6g', 'N_std': '%.6g', 'EW': '%.6g', 'b': '%.6g', 'b_std': '%.6g'})
+        if 'N' in params:
+            formats = {'N': '%.6g', 'N_std': '%.6g', 'EW': '%.6g', 'b': '%.6g', 'b_std': '%.6g'}
+            ascii.write(params, filename, formats=formats)
+        elif 'total' in params:
+            formats = {'total': '%.6g', 'chi_squared': '%.6g', 'centers': '%.6g', 'amplitude': '%.6g', 'sigmas': '%.6g', 
+                        'std_a': '%.6g', 'std_s': '%.6g', 'std_c': '%.6g', 'cov_as': '%.6g'}
+            ascii.write(params, filename, formats=formats)
     if format == 'h5':
         with h5py.File(filename, 'a') as f:
             for p in params.keys():
@@ -1001,5 +1014,6 @@ if __name__ == "__main__":
     taus = data['tau'][:]
 
     params, flux_model = fit_spectrum(wavelength, noise, taus, args.line, voigt=args.voigt, folder=args.output_folder)
-    write_file(params, args.output_folder+'params.dat', 'h5')
+    write_file(params, args.output_folder+'params.h5', 'h5')
+    write_file(params, args.output_folder+'flux_model.h5', 'h5')
 
