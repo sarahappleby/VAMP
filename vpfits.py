@@ -780,7 +780,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         nu = np.flip(frequency_array[start:end], 0)
         taus = np.flip(tau_array[start:end], 0)
 
-
+        best_chi_squared = -1 #initialize best_chi_sq
         for _ in range(10):
 
             # make initial guess for number of lines in a region
@@ -795,14 +795,25 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
             # evaluate overall chi squared
             n = len(fit.estimated_profiles)
             freedom = len(fluxes) - 3*n
-            
-            flux_model['chi_squared'][j] = fit.ReducedChisquared(fluxes, fit.total.value, noise, freedom)
-            
-            print 'Reduced chi squared is {:.2f}'.format(flux_model['chi_squared'][j])
-            
+
+            current_chi_squared = fit.ReducedChisquared(fluxes, fit.total.value, noise, freedom)
+
+            print 'Reduced chi squared is {:.2f}'.format(current_chi_squared)
+
+            #if this is the best (or first) chi-squared value seen so far, record it and save the fit
+            if (current_chi_squared < best_chi_squared) or (best_chi_squared == -1) :
+                best_chi_squared = current_chi_squared
+                best_fit = fit
+
             # if chi squared is sufficiently small, stop there. If not, repeat the region fitting
-            if flux_model['chi_squared'][j] < chi_limit:
+            if best_chi_squared < chi_limit:
                 break
+
+        # use the best fit found in the loop above
+        fit = best_fit
+        n = len(fit.estimated_profiles)
+        flux_model['chi_squared'][j] = best_chi_squared
+
 
         print '\n'
         flux_model['total'][start:end] = np.flip(fit.total.value, 0)
