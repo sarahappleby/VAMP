@@ -43,6 +43,11 @@ import gc
 
 from physics import *
 
+#TODO: change the way that "Models are instantiated" (need to understand that first)
+import warnings
+warnings.filterwarnings("ignore", message="Instantiating a Model object directly is deprecated. We recommend passing variables directly to the Model subclass.")
+
+
 class VPfit():
 
     def __init__(self, noise=None):
@@ -354,6 +359,10 @@ class VPfit():
         self.profile = mc.Normal("obs", self.total, self.std_deviation, value=flux, observed=True)
 
         # create model with parameters of all profiles to be fitted
+        # TODO: fix the deprecation error (this is the only case where a "Model" is instantiated):
+        # /home/jacobc/anaconda2/envs/vamp27pymc237/lib/python2.7/site-packages/pymc/MCMC.py:81: 
+        # UserWarning: Instantiating a Model object directly is deprecated. We recommend passing variables directly to the Model subclass.  warnings.warn(message)
+
         self.model = mc.Model([self.estimated_variables[x][y] for x in self.estimated_variables \
                             for y in self.estimated_variables[x]])# + [std_deviation])
 
@@ -813,6 +822,7 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         fit = best_fit
         n = len(fit.estimated_profiles)
         flux_model['chi_squared'][j] = best_chi_squared
+        print("Using model with best chi-squared seen, which is : {:.2f}".format(best_chi_squared))
 
 
         print '\n'
