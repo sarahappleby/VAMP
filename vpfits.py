@@ -1038,7 +1038,7 @@ if __name__ == "__main__":
     flux = np.array(data['flux'][:])
 
 
-    params, flux_model = fit_spectrum(wavelength, noise, flix, args.line, voigt=args.voigt, folder=args.output_folder)
+    params, flux_model = fit_spectrum(wavelength, noise, flux, args.line, voigt=args.voigt, folder=args.output_folder)
     write_file(params, args.output_folder+'params.h5', 'h5')
     write_file(flux_model, args.output_folder+'flux_model.h5', 'h5')
 
