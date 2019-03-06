@@ -779,10 +779,10 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
                             flux_array, noise_array, min_region_width=2)
 
     params = {'b': np.array([]), 'b_std': np.array([]), 'N': np.array([]), 'N_std': np.array([]), 
-                'EW': np.array([]), 'centers': np.array([])}
+                'EW': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([])}
 
     flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)), 'region_pixels': region_pixels,
-                'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 
+                'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([]),
                 'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([])}
     
     j = 0
@@ -842,7 +842,9 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
             flux_model['region_'+str(j)+'_flux'][k] = np.flip(Tau2flux(fit.estimated_profiles[k].value), 0)
 
         heights = np.array([fit.estimated_variables[i]['amplitude'].value for i in range(n)])
-        centers = np.array([fit.estimated_variables[i]['centroid'].value for i in range(n)])
+        centers = np.array([Freq2wave(fit.estimated_variables[i]['centroid'].value) for i in range(n)])
+        region_numbers = np.array(j for i in range(n))
+
 
         if not voigt:
             sigmas = np.array([fit.estimated_variables[i]['sigma'].value for i in range(n)])
@@ -853,6 +855,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         
         flux_model['amplitude'] = np.append(flux_model['amplitude'], heights)
         flux_model['centers'] = np.append(flux_model['centers'], centers)
+        flux_model['region_numbers'] = np.append(flux_model['region_numbers'], region_numbers)
         flux_model['sigmas'] = np.append(flux_model['sigmas'], sigmas)
 
         if mcmc_cov:
@@ -880,6 +883,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         params['b'] = np.append(params['b'], DopplerParameter(sigmas, line))
         params['N'] = np.append(params['N'], ColumnDensity(heights, sigmas))
         params['centers'] = np.append(params['centers'], centers)
+        params['region_numbers'] = np.append(params['region_numbers'], centers)
         for k in range(n):
             params['EW'] = np.append(params['EW'], EquivalentWidth(fit.estimated_profiles[k].value, [waves[0], waves[-1]]))
         
@@ -992,7 +996,8 @@ def write_file(params, filename, format):
     if format == 'ascii':
         import astropy.io.ascii as ascii
         if 'N' in params:
-            formats = {'N': '%.6g', 'N_std': '%.6g', 'EW': '%.6g', 'b': '%.6g', 'b_std': '%.6g'}
+            formats = {'N': '%.6g', 'N_std': '%.6g', 'EW': '%.6g', 'b': '%.6g', 'b_std': '%.6g', 'centers': '%.6g',
+                       'region_numbers': '%.6g'}
             ascii.write(params, filename, formats=formats)
         elif 'total' in params:
             formats = {'total': '%.6g', 'chi_squared': '%.6g', 'centers': '%.6g', 'amplitude': '%.6g', 'sigmas': '%.6g', 
