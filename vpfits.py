@@ -843,7 +843,8 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
 
         heights = np.array([fit.estimated_variables[i]['amplitude'].value for i in range(n)])
         centers = np.array([Freq2wave(fit.estimated_variables[i]['centroid'].value) for i in range(n)])
-        region_numbers = np.array(j for i in range(n))
+        #region_numbers = np.array(j for i in range(n)
+        region_numbers = np.array([j for i in range(n)])
 
 
         if not voigt:
@@ -892,6 +893,13 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
     if folder:
         plot_spectrum(wavelength_array, flux_array, flux_model, region_pixels, folder)
 
+    """
+    print("len(N) in params: " + str(len(params['N'])))
+    print("len(centers) in params: " + str(len(params['centers'])))
+    print("len(region_numbers) in params: " + str(len(params['region_numbers'])))
+    print("len(centers) in flux_model: " + str(len(flux_model['centers'])))
+    print("len(region_numbers) in flux_model: " + str(len(flux_model['region_numbers'])))
+    """
     return params, flux_model
 
 
