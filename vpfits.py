@@ -768,6 +768,8 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
     """
 
     frequency_array = Wave2freq(wavelength_array)
+    flux_floor = 1e-6
+    flux_array = flux_array.clip(min=flux_floor) #set all negative fluxes to some very small value
     #flux_array = Tau2flux(tau_array) + noise_array
     #TODO: figure out if this (tau_array) is used anywhere
     tau_array =  Flux2tau(flux_array)
