@@ -766,13 +766,11 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         ew (numpy array): Equivalent widths, in Angstroms.
         centers (numpy array): Centroids of absorption lines, in Angstroms.
     """
+    chi_sq_maximum = 10 #the maximum "acceptable" chi-squared value before the line adder forcer kicks in
 
     frequency_array = Wave2freq(wavelength_array)
     flux_floor = 1e-6
     flux_array = flux_array.clip(min=flux_floor) #set all negative fluxes to some very small value
-    #flux_array = Tau2flux(tau_array) + noise_array
-    #TODO: figure out if this (tau_array) is used anywhere
-    tau_array =  Flux2tau(flux_array)
 
     # identify regions to fit in the spectrum
     regions, region_pixels = compute_detection_regions(wavelength_array, 
@@ -792,14 +790,28 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         noise = np.flip(noise_array[start:end], 0)
         waves = np.flip(wavelength_array[start:end], 0)
         nu = np.flip(frequency_array[start:end], 0)
-        #TODO: figure out if this (taus variable) is used anywhere
-        #taus = np.flip(tau_array[start:end], 0)
 
-        best_chi_squared = -1 #initialize best_chi_sq
+
+        best_chi_squared = -1 #initial  ize best_chi_sq
+
+        #track the chi-squared values and associated number of components, to force-add components if necessary
+        attempt_n = []
+        attempt_chi_squareds = []
         for _ in range(10):
 
             # make initial guess for number of lines in a region
             n = estimate_n(fluxes)
+
+            # force the fitter to add additional components if it has previously failed with fewer components
+            # (even if BIC indicates otherwise)
+
+            if (attempt_n.count(n) > 2): #check if it's failed to converge for a few attempts with this number of components
+                #check what the chi-squareds were
+                ii = np.where(attempt_n == component)[0]
+                chi_squareds = attempt_chi_squareds[ii]
+                if (np.min(chi_squareds) > chi_sq_maximum): #if the best chi squared value is still too high
+                    n += 1 #force it to add another component
+
 
             # number of degrees of freedom = number of data points + number of parameters
             freedom = len(fluxes) - 3*n
@@ -812,6 +824,8 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
             freedom = len(fluxes) - 3*n
 
             current_chi_squared = fit.ReducedChisquared(fluxes, fit.total.value, noise, freedom)
+            attempt_n.append(n)
+            attempt_chi_squareds.append(current_chi_squared)
 
             print 'Reduced chi squared is {:.2f}'.format(current_chi_squared)
 
