@@ -743,7 +743,7 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
 
 
 
-def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, chi_limit=1.5, folder=None, mcmc_cov=False, get_b_std=True):
+def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, chi_limit=1.5, folder=None, mcmc_cov=False, get_b_std=True):
     """
     The main function. Takes an input spectrum, splits it into manageable regions, and fits 
     the individual regions using PyMC. Finally calculates the Doppler parameter b, the 
@@ -752,7 +752,8 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
     Args:
         wavelength_array (numpy array): in Angstroms
         noise_array (numpy array)
-        tau_array (numpy array)
+        flux_array(numpy array)
+        flux_array (numpy array)
         line (float): the rest wavelength of the absorption line in Angstroms
         voigt (boolean): switch to fit Voigt profile instead of Gaussian. Default: True.
         folder (string): if plotting the fits and saving them, provide a directory. Default: None.
@@ -767,7 +768,9 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
     """
 
     frequency_array = Wave2freq(wavelength_array)
-    flux_array = Tau2flux(tau_array) + noise_array 
+    #flux_array = Tau2flux(tau_array) + noise_array
+    #TODO: figure out if this (tau_array) is used anywhere
+    tau_array =  Flux2tau(flux_array)
 
     # identify regions to fit in the spectrum
     regions, region_pixels = compute_detection_regions(wavelength_array, 
@@ -787,7 +790,8 @@ def fit_spectrum(wavelength_array, noise_array, tau_array, line, voigt=False, ch
         noise = np.flip(noise_array[start:end], 0)
         waves = np.flip(wavelength_array[start:end], 0)
         nu = np.flip(frequency_array[start:end], 0)
-        taus = np.flip(tau_array[start:end], 0)
+        #TODO: figure out if this (taus variable) is used anywhere
+        #taus = np.flip(tau_array[start:end], 0)
 
         best_chi_squared = -1 #initialize best_chi_sq
         for _ in range(10):
@@ -1029,11 +1033,12 @@ if __name__ == "__main__":
     import h5py
     data = h5py.File(args.data_file, 'r')
     
-    wavelength = data['wavelength'][:]
-    noise = data['noise'][:]
-    taus = data['tau'][:]
+    wavelength = np.array(data['wavelength'][:])
+    noise = np.array(data['noise'][:])
+    flux = np.array(data['flux'][:])
 
-    params, flux_model = fit_spectrum(wavelength, noise, taus, args.line, voigt=args.voigt, folder=args.output_folder)
+
+    params, flux_model = fit_spectrum(wavelength, noise, flix, args.line, voigt=args.voigt, folder=args.output_folder)
     write_file(params, args.output_folder+'params.h5', 'h5')
     write_file(flux_model, args.output_folder+'flux_model.h5', 'h5')
 
