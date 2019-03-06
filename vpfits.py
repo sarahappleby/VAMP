@@ -805,12 +805,24 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
             # force the fitter to add additional components if it has previously failed with fewer components
             # (even if BIC indicates otherwise)
 
-            if (attempt_n.count(n) > 2): #check if it's failed to converge for a few attempts with this number of components
-                #check what the chi-squareds were
-                ii = np.where(attempt_n == component)[0]
-                chi_squareds = attempt_chi_squareds[ii]
-                if (np.min(chi_squareds) > chi_sq_maximum): #if the best chi squared value is still too high
-                    n += 1 #force it to add another component
+            n_is_sensible = False
+            while(n_is_sensible == False):
+                if (attempt_n.count(n) > 2): #check if it's failed to converge for a few attempts with this number of components
+                    #check what the chi-squareds were for this number
+                    ii = [i for i,val in enumerate(attempt_n) if val==n]
+                    #print(ii)
+                    #print(attempt_n)
+                    #print(attempt_chi_squareds)
+                    chi_squareds = np.array(attempt_chi_squareds)[ii]
+                    if (np.min(chi_squareds) > chi_sq_maximum): #if the best chi squared value is still too high
+                        print("Chi-squareds have been too high for fits using n=" + str(n) + " components. (chi-sq>" + str(chi_sq_maximum) + ")")
+                        n += 1 #force it to add another component
+                        print("Forcing the fitter to increase the fit to at least n=" + str(n) + " components.")
+                    else:
+                        n_is_sensible = True
+                else:
+                    n_is_sensible = True
+
 
 
             # number of degrees of freedom = number of data points + number of parameters
