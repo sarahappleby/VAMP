@@ -826,7 +826,16 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         
         elif get_b_std:
             stats = fit.mcmc.stats()
+            #TODO: figure out why this "std_s = " line is giving " KeyError: 'est_sigma_0' " when --voigt is used
             std_s = np.array([stats['est_sigma_'+str(i)]['standard deviation'] for i in range(n)])
+            """
+            Traceback (most recent call last):
+                File "/home/jacobc/VAMP/vpfits.py", line 1082, in <module>
+                    params, flux_model = fit_spectrum(wavelength, noise, flux, args.line, voigt=args.voigt, folder=args.output_folder)
+                File "/home/jacobc/VAMP/vpfits.py", line 905, in fit_spectrum
+                    std_s = np.array([stats['est_sigma_'+str(i)]['standard deviation'] for i in range(n)])
+            KeyError: 'est_sigma_0'
+            """
             flux_model['std_s'] = np.append(flux_model['std_s'], std_s)
 
             params['b_std'] = np.append(params['b_std'], ErrorB(std_s, line))
