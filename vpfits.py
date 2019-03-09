@@ -6,8 +6,7 @@ of profiles for a given absorption.
 
 The main method for fitting absorption spectra is 'fit_spectrum'. 
 
-The main class containing the fitting functionality is `VPfit`. A mock absorption generator, 
-`mock_absorption`, is also included for demonstration.
+The main class containing the fitting functionality is `VPfit`.
 
 See `__init__` for example usage.
 
@@ -471,82 +470,7 @@ class VPfit():
             c_samples = self.mcmc.trace('est_centroid_'+str(i))[:]
         
             cov[i] = np.cov(np.array((amp_samples, sigma_samples, c_samples)))
-        return cov 
-
-
-def mock_absorption(wavelength_start=5010, wavelength_end=5030, n=3,
-                    plot=True, onesigmaerror = 0.02, saturated=False, voigt=False):
-    """
-    Generate a mock absorption profile.
-
-    Args:
-        wavelength_start (int): start of wavelength range
-        wavelength_end (int): end of wavelength range
-        n (int): number of absorption features
-        plot (bool): plots the profile
-        onesigmaerror (float): noise on profile plot
-
-    Returns:
-        clouds (pandas dataframe): dataframe containing parameters for each absorption feature
-        wavelength_array (numpy array)
-    """
-
-    vpfit = VPfit()
-
-    wavelength_array = np.arange(wavelength_start, wavelength_end, 0.01)
-
-    clouds = pd.DataFrame({'cloud': pd.Series([], dtype='str'),
-                       'amplitude': pd.Series([], dtype='float'),
-                       'centroid': pd.Series([], dtype='float'),
-                       'sigma': pd.Series([], dtype='float'),
-                       'tau': pd.Series([], dtype='object')})
-
-    for cloud in range(n):
-
-        if(saturated):
-            max_amplitude = 5
-        else:
-            max_amplitude = 1
-
-        if(voigt):
-            clouds = clouds.append({'cloud': cloud, 'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
-                                    'amplitude': random.uniform(0, max_amplitude),
-                                    'L': random.uniform(0,2), 'G': random.uniform(0,2), 'tau':[]}, ignore_index=True)
-
-            clouds.set_value(cloud, 'tau', VPfit.VoigtFunction(wavelength_array, clouds.loc[cloud]['centroid'],
-                                            clouds.loc[cloud]['amplitude'], clouds.loc[cloud]['L'], clouds.loc[cloud]['G']))
-
-        else:
-            clouds = clouds.append({'cloud': cloud, 'amplitude': random.uniform(0, max_amplitude),
-                                    'centroid': random.uniform(wavelength_start+2, wavelength_end-2),
-                                    'sigma': random.uniform(0,2), 'tau':[]}, ignore_index=True)
-
-            clouds.set_value(cloud, 'tau', VPfit.GaussFunction(wavelength_array, clouds.loc[cloud]['amplitude'],
-                                             clouds.loc[cloud]['centroid'], clouds.loc[cloud]['sigma']))
-
-
-    if plot:
-        noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
-        flux_array = Tau2flux(sum(clouds['tau'])) + noise
-
-        f, (ax1, ax2) = plt.subplots(2, sharex=True, sharey=False)
-
-        ax1.plot(wavelength_array, sum(clouds['tau']), color='black', label='combined', lw=2)
-        for c in range(len(clouds)):
-            ax1.plot(wavelength_array, clouds.ix[c]['tau'], label='comp_1')
-
-        ax2.plot(wavelength_array, flux_array, color='black')
-        f.subplots_adjust(hspace=0)
-
-        ax1.set_ylabel("Optical Depth")
-
-        ax2.set_ylabel("Normalized Flux")
-        ax2.set_xlabel("$\lambda (\AA)$")
-        ax2.set_ylim(0, 1.1)
-
-        plt.show()
-
-    return clouds, wavelength_array
+        return cov
 
 
 def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=2, 
@@ -1066,8 +990,6 @@ if __name__ == "__main__":
         args.output_folder += name + '_voigt_'
     else:
         args.output_folder += name + '_gauss_'
-
-    #clouds, wavelength_array = mock_absorption(wavelength_start=line-5., wavelength_end=line+5., n=2)
 
     #onesigmaerror = 0.02
     #noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
