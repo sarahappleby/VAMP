@@ -63,8 +63,10 @@ def ErrorN(amplitude, sigma, std_a, std_s, cov_as):
     prefactor = np.sqrt(2.*np.pi) / constants['sigma0']['value']
     amp_part = sigma**2 * std_a **2
     sig_part = amplitude**2 * std_s**2
-    cov_part = 2*cov_as * amplitude * sigma
-    return prefactor * np.sqrt(amp_part + sig_part + cov_part)
+    #cov_part = 2*cov_as * amplitude * sigma
+    #return prefactor * np.sqrt(amp_part + sig_part + cov_part)
+    return prefactor * np.sqrt(amp_part + sig_part) #currently ignoring covariance
+
 
 def Errorl(std_f):
     """
