@@ -667,7 +667,7 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
 
 
 
-def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, chi_limit=1.5, folder=None, mcmc_cov=False, get_b_std=True):
+def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, chi_limit=1.5, folder=None, mcmc_cov=False, get_mcmc_err=True):
     """
     The main function. Takes an input spectrum, splits it into manageable regions, and fits 
     the individual regions using PyMC. Finally calculates the Doppler parameter b, the 
@@ -682,7 +682,8 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         voigt (boolean): switch to fit Voigt profile instead of Gaussian. Default: True.
         folder (string): if plotting the fits and saving them, provide a directory. Default: None.
         mcmc_cov (boolean): switch to do error propogation from the mcmc chain. Default: False
-        get_b_std (boolean): switch to find the standard deviation of b from the mcmc chain. Default: True.
+        #get_b_std (boolean): switch to find the standard deviation of b from the mcmc chain. Default: True.
+        get_mcmc_err (boolean): switch to find the standard deviation (of b and N) from the mcmc chain. Default: True
 
     Returns:
         b (numpy array): Doppler parameter, in km/s.
@@ -824,21 +825,27 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
 
             params['N_std'] = np.append(params['N_std'], ErrorN(heights, sigmas, std_a, std_s, cov_as))
         
-        elif get_b_std:
+        elif get_mcmc_err:
             stats = fit.mcmc.stats()
             #TODO: figure out why this "std_s = " line is giving " KeyError: 'est_sigma_0' " when --voigt is used
-            std_s = np.array([stats['est_sigma_'+str(i)]['standard deviation'] for i in range(n)])
+            # (probably because it's called something else in the Voigt object?)
             """
-            Traceback (most recent call last):
-                File "/home/jacobc/VAMP/vpfits.py", line 1082, in <module>
-                    params, flux_model = fit_spectrum(wavelength, noise, flux, args.line, voigt=args.voigt, folder=args.output_folder)
-                File "/home/jacobc/VAMP/vpfits.py", line 905, in fit_spectrum
-                    std_s = np.array([stats['est_sigma_'+str(i)]['standard deviation'] for i in range(n)])
-            KeyError: 'est_sigma_0'
-            """
+             Traceback (most recent call last):
+                 File "/home/jacobc/VAMP/vpfits.py", line 1082, in <module>
+                     params, flux_model = fit_spectrum(wavelength, noise, flux, args.line, voigt=args.voigt, folder=args.output_folder)
+                 File "/home/jacobc/VAMP/vpfits.py", line 905, in fit_spectrum
+                     std_s = np.array([stats['est_sigma_'+str(i)]['standard deviation'] for i in range(n)])
+             KeyError: 'est_sigma_0'
+             """
+            std_s = np.array([stats['est_sigma_'+str(i)]['standard deviation'] for i in range(n)]) #mcmc fitting error for "sigmas"
+            std_a = np.array([stats['xexp_'+str(i)]['standard deviation'] for i in range(n)])      #mcmc fitting error for "amplitude" (referred to as "xexp"
+
             flux_model['std_s'] = np.append(flux_model['std_s'], std_s)
+            flux_model['std_a'] = np.append(flux_model['std_a'], std_a)
 
             params['b_std'] = np.append(params['b_std'], ErrorB(std_s, line))
+            covariance = [0] * len(std_a) # treat covariance as 0  TODO: figure out how to extract covariance (if possible) from MCMC chain.
+            params['N_std'] = np.append(params['N_std'], ErrorN(amplitude=heights,sigma=sigmas,std_a=std_a, std_s=std_s, cov_as=covariance))
 
         params['b'] = np.append(params['b'], DopplerParameter(sigmas, line))
         params['N'] = np.append(params['N'], ColumnDensity(heights, sigmas))
