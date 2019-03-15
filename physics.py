@@ -24,7 +24,7 @@ def DopplerParameter(sigma, line):
     """
     # convert line position from Angstroms to m.
     line *= 1.e-10
-    return (line*sigma / np.sqrt(2))*1.e-3
+    return (line*sigma*2.355 / np.sqrt(2))*1.e-3 #multiply by 2.355 to convert from std. dev. to FWHM
 
 def EquivalentWidth(taus, edges):
     """

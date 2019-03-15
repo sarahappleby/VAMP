@@ -850,7 +850,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         params['b'] = np.append(params['b'], DopplerParameter(sigmas, line))
         params['N'] = np.append(params['N'], ColumnDensity(heights, sigmas))
         params['centers'] = np.append(params['centers'], centers)
-        params['region_numbers'] = np.append(params['region_numbers'], centers)
+        params['region_numbers'] = np.append(params['region_numbers'], region_numbers)
         for k in range(n):
             params['EW'] = np.append(params['EW'], EquivalentWidth(fit.estimated_profiles[k].value, [waves[0], waves[-1]]))
         
