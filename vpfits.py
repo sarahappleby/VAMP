@@ -40,6 +40,11 @@ from scipy.signal import argrelextrema
 from copy import copy
 import gc
 
+import multiprocessing as mp
+import os
+import h5py
+
+
 from physics import *
 
 #TODO: change the way that "Models are instantiated" (need to understand that first)
@@ -667,8 +672,7 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
 
 
 
-def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, chi_limit=1.5, folder=None,
-                 mcmc_cov=False, get_mcmc_err=True, convergence_attempts=10):
+def fit_spectrum(spectrum_file, line, voigt=False, chi_limit=1.5, out_folder=None, mcmc_cov=False, get_mcmc_err=True, convergence_attempts=10):
     """
     The main function. Takes an input spectrum, splits it into manageable regions, and fits 
     the individual regions using PyMC. Finally calculates the Doppler parameter b, the 
@@ -681,7 +685,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         flux_array (numpy array)
         line (float): the rest wavelength of the absorption line in Angstroms
         voigt (boolean): switch to fit Voigt profile instead of Gaussian. Default: True.
-        folder (string): if plotting the fits and saving them, provide a directory. Default: None.
+        out_folder (string): if plotting the fits and saving them, provide a directory. Default: None.
         mcmc_cov (boolean): switch to do error propogation from the mcmc chain. Default: False
         #get_b_std (boolean): switch to find the standard deviation of b from the mcmc chain. Default: True.
         get_mcmc_err (boolean): switch to find the standard deviation (of b and N) from the mcmc chain. Default: True
@@ -692,58 +696,57 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         ew (numpy array): Equivalent widths, in Angstroms.
         centers (numpy array): Centroids of absorption lines, in Angstroms.
     """
+
+    # Fitting settings  TODO: turn these all into parameters
+    ##################################
     chi_sq_maximum = 10 #the maximum "acceptable" chi-squared value before the line adder forcer kicks in
+    max_single_region_components = 15
+    ideal_single_region_components = 5
+    convergence_attempts = convergence_attempts
+    min_region_percentage = 2 #minimum % of pixels in a spectra a region must take up (when forcing to split regions)
+    #####################################
+
+
+    # Getting data from spectrum file
+    ##################################################
+    data = h5py.File(spectrum_file, 'r')
+
+    wavelength_array = np.array(data['wavelength'][:])
+    noise_array = np.array(data['noise'][:])
+    flux_array = np.array(data['flux'][:])
 
     frequency_array = Wave2freq(wavelength_array)
-    #TODO: see if I actually need this? doesn't appear so, since I don't see anywhere that flux --> optical depth?
-    #flux_floor = 1e-6
-    #flux_array = flux_array.clip(min=flux_floor) #set all negative fluxes to some very small value
+    ###################################
 
     # identify regions to fit in the spectrum
     regions, region_pixels = compute_detection_regions(wavelength_array, 
                             flux_array, noise_array, min_region_width=2)
 
-    #this should be declared after the number of regions is finalized
-    """
-    params = {'b': np.array([]), 'b_std': np.array([]), 'N': np.array([]), 'N_std': np.array([]), 
-                'EW': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([])}
-
-    flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)), 'region_pixels': region_pixels,
-                'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([]),
-                'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([])}
-    """
     difficult_fit = False #default is that the fit is fine
 
 
-    max_single_region_components = 15
-    ideal_single_region_components = 5
+    # check if the fit is going to be "difficult", i.e. 1 region with way too many components
     if (len(regions) == 1):
-        difficult_fit = True #flag the fit as being difficult
         start = region_pixels[0][0]
         end = region_pixels[0][1]
         fluxes = np.flip(flux_array[start:end], 0)
         n = estimate_n(fluxes)
         if (n > max_single_region_components):
+            difficult_fit = True  # flag the fit as being difficult
             print(str(n) + " components should be in more than 1 region!")
-            #TODO: split the regions up
             #TODO: find some handling for (a) damped absorbers (b) spectra which need flux to be rescaled
             forced_number_regions = n // ideal_single_region_components
             print("trying to force-split into " + str(forced_number_regions) + " regions.")
-            #TODO: turn this index gathering into a function? just in case it needs to be repeated
+            #maybe turn this index gathering into a function? just in case it needs to be repeated
             ind = np.argpartition(fluxes, -10*forced_number_regions)[-10*forced_number_regions:]
             ind_sorted = np.flip(ind[np.argsort(fluxes[ind])], axis=0) #indicies sorted from highest flux to lowest flux
             print(str(len(ind_sorted)) + " possible split points to choose from")
 
-            #don't let regions be less than X% (5%?) of the spectrum
             num_pixels = len(fluxes)
             print("There are: " + str(num_pixels) + " pixels.")
-            min_region_percentage = 2
             min_region_size = num_pixels * (min_region_percentage / 100.0)
             print("Minimum region pixels: " + str(min_region_size))
 
-
-            #new_starts = [start]
-            #new_ends = []
             splitting_points = [start, end]
             # original "start" is the beginning of the 1st region
             # original "end" is the end of the last region
@@ -755,6 +758,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
                 # see if they can be the required distance away from each other.
                 # if they can't be made to work, try working down the list of maximum fluxes
                 if (len(splitting_points) == (forced_number_regions+1)):
+                    print("Found enough splitting regions")
                     break #stop once enough points to split have been found
                 else:
                     dist_is_fine = True
@@ -779,11 +783,6 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
                 region_pixels.append([start,end]) #save the pixel numbers
                 regions.append([wavelength_array[start], wavelength_array[end]]) #save the wavelengths
 
-            """
-            starts = splitting_points[0:forced_number_regions]
-            ends = splitting_points[1:forced_number_regions+1]
-            region_pixels = [starts, ends] #not the right dimensions! (2 x n vs n x 2) 
-            """
 
     # dicts to store results
     params = {'b': np.array([]), 'b_std': np.array([]), 'N': np.array([]), 'N_std': np.array([]),
@@ -962,8 +961,18 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         
         j += 1
 
-    if folder:
-        plot_spectrum(wavelength_array, flux_array, flux_model, region_pixels, folder)
+    if out_folder:
+        name = spectrum_file.split('/', -1)[-1]
+        name = name[:name.find('.')] #returns e.g. "spectrum_17" (without any folder, or .h5 extension)
+        base_output_filename = output_folder + name
+        if args.voigt == True:
+            base_output_filename += '_voigt_'
+        else:
+            base_output_filename +=  '_gauss_'
+
+        plot_spectrum(wavelength_array, flux_array, flux_model, region_pixels, base_output_filename)
+        write_file(params, base_output_filename + 'params.h5', 'h5')
+        write_file(flux_model, base_output_filename + 'flux_model.h5', 'h5')
 
     """
     print("len(N) in params: " + str(len(params['N'])))
@@ -972,7 +981,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
     print("len(centers) in flux_model: " + str(len(flux_model['centers'])))
     print("len(region_numbers) in flux_model: " + str(len(flux_model['region_numbers'])))
     """
-    return params, flux_model
+    #return params, flux_model
 
 
 def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
@@ -1103,29 +1112,79 @@ if __name__ == "__main__":
     parser.add_argument('--voigt',
                         help='Fit Voigt profile. Default: False', 
                         action='store_true')
+    parser.add_argument('--parallel',
+                        help='Number of processes to use (for running on a folder with multiple spectra)',
+                        default=1, type=int)
+    parser.add_argument('--conv_attempts',
+                        help='Number of attempts at mcmc chain convergence',
+                        default=5, type=int)
+
+    parser.add_argument()
     args = parser.parse_args()
+    num_procs = args.parallel
 
-    name = args.data_file.split('/', -1)[-1]
-    name = name[:name.find('.')]
+    convergence_attempts = args.conv_attempts
 
-    if args.voigt == True:
-        args.output_folder += name + '_voigt_'
+    if (num_procs == 1):
+        #single spectra processing
+        name = args.data_file.split('/', -1)[-1]
+        name = name[:name.find('.')]
+
+        if args.voigt == True:
+            args.output_folder += name + '_voigt_'
+        else:
+            args.output_folder += name + '_gauss_'
+
+        """
+        import h5py
+        data = h5py.File(args.data_file, 'r')
+
+        wavelength = np.array(data['wavelength'][:])
+        noise = np.array(data['noise'][:])
+        flux = np.array(data['flux'][:])
+        """
+        #params, flux_model =
+        fit_spectrum(args.data_file, args.line, voigt=args.voigt, out_folder=args.output_folder, convergence_attempts=convergence_attempts)
+        #write_file(params, args.output_folder+'params.h5', 'h5')
+        #write_file(flux_model, args.output_folder+'flux_model.h5', 'h5')
+
+    elif (num_procs > 1):
+        #multi-processing a folder of spectra
+        spectra_folder = args.data_file
+        #TODO: check this folder exists
+        if not(spectra_folder.endswith("/")):
+            spectra_folder += "/"
+
+        spectra_to_fit = []
+        for f in os.listdir(spectra_folder):
+            if f.endswith(".h5"):
+                file_path = spectra_folder + f
+                spectra_to_fit.append(file_path)
+
+        print("Going to fit " + str(len(spectra_to_fit)) + " spectra, using " + str(num_procs) + " processes.")
+
+        output_folder = args.output_folder
+        if not (output_folder.endswith("/")):
+            output_folder += "/"
+        #TODO: make folder if it doesn't exist, check if any files inside if it does (then warn)
+
+        #Make a pool of processes to handle these files
+        maxtaskperchild = 5 #the number of tasks a process can perform, before exiting (and then re-spawning - point here is to clean up things)
+
+        pool = mp.Pool(processes=num_procs,maxtasksperchild=maxtaskperchild) #make a pool with the specified settings
+        for spectra in spectra_to_fit:
+            #params, flux_model =
+            # ACTUALLY RUN THE THING
+            pool.apply(fit_spectrum,args=(spectra, args.line, voigt=args.voigt, out_folder=output_folder, convergence_attempts=convergence_attempts))
+            """
+            params, flux_model = pool.apply(fit_spectrum, args=(wavelength, noise, flux, args.line, 
+                                                                voigt=args.voigt, folder=args.output_folder,
+                                                                convergence_attempts=convergence_attempts,))      
+            """
+        # results = [pool.apply(cube, args=(x,)) for x in range(1, 7)]
+        # print(results)
     else:
-        args.output_folder += name + '_gauss_'
+        print("The --parallel setting: \"" + str(num_procs) +"\" wasn't understood.")
+        print("There needs to be an integer number of processes specified.")
 
-    #onesigmaerror = 0.02
-    #noise = np.random.normal(0.0, onesigmaerror, len(wavelength_array))
-    import h5py
-    data = h5py.File(args.data_file, 'r')
-    
-    wavelength = np.array(data['wavelength'][:])
-    noise = np.array(data['noise'][:])
-    flux = np.array(data['flux'][:])
-
-    convergence_attempts = 5 #TODO: set this in some configuration file
-
-    params, flux_model = fit_spectrum(wavelength, noise, flux, args.line, voigt=args.voigt, folder=args.output_folder,
-                                      convergence_attempts=convergence_attempts)
-    write_file(params, args.output_folder+'params.h5', 'h5')
-    write_file(flux_model, args.output_folder+'flux_model.h5', 'h5')
 
