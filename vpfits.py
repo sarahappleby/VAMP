@@ -712,10 +712,13 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
                 'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([]),
                 'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([])}
     """
+    difficult_fit = False #default is that the fit is fine
+
 
     max_single_region_components = 15
     ideal_single_region_components = 5
     if (len(regions) == 1):
+        difficult_fit = True #flag the fit as being difficult
         start = region_pixels[0][0]
         end = region_pixels[0][1]
         fluxes = np.flip(flux_array[start:end], 0)
@@ -788,7 +791,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
 
     flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)), 'region_pixels': region_pixels,
                 'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([]),
-                'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([])}
+                'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([]), 'difficult_fit': difficult_fit}
 
 
 
@@ -805,7 +808,18 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         #track the chi-squared values and associated number of components, to force-add components if necessary
         attempt_n = []
         attempt_chi_squareds = []
-        for _ in range(convergence_attempts):
+        n = estimate_n(fluxes)
+        if (n > max_single_region_components): #if there are too many components: reduce the number of attempts, and flag this spectra as difficult
+            num_attempts = 2
+            flux_model['difficult_fit'] = True
+            if (n > (1.5 *max_single_region_components)): #fits for that many components are going to be garbage no matter how many times they're ran
+                num_attempts = 1
+            #params['difficult_fit'] = True
+        else: #otherwise, use the default setting
+            num_attempts = convergence_attempts
+
+
+        for _ in range(num_attempts):
 
             # make initial guess for number of lines in a region
             n = estimate_n(fluxes)
@@ -837,7 +851,16 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
             freedom = len(fluxes) - 3*n
             
             # fit the region by minimising BIC and chi squared
-            fit = region_fit(nu, fluxes, n, noise, freedom, voigt=voigt, chi_limit=chi_limit)
+            if (n > max_single_region_components): #less strict convergence criteria for un-splittable regions
+                print("increasing chi_limit to " + str(chi_limit*3) + ", because n = " + str(n))
+                iteration_chi_limit = chi_limit*3
+                #fit = region_fit(nu, fluxes, n, noise, freedom, voigt=voigt, chi_limit=(chi_limit*3))
+            else:
+                iteration_chi_limit = chi_limit
+                #fit = region_fit(nu, fluxes, n, noise, freedom, voigt=voigt, chi_limit=iteration_chi_limit)
+
+            fit = region_fit(nu, fluxes, n, noise, freedom, voigt=voigt, chi_limit=iteration_chi_limit)
+
             
             # evaluate overall chi squared
             n = len(fit.estimated_profiles)
@@ -855,7 +878,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
                 best_fit = fit
 
             # if chi squared is sufficiently small, stop there. If not, repeat the region fitting
-            if best_chi_squared < chi_limit:
+            if best_chi_squared < iteration_chi_limit:
                 break
 
         # use the best fit found in the loop above
