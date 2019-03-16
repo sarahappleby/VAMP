@@ -759,6 +759,24 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
                     if dist_is_fine: #if the region would be large enough, then split along this point
                         splitting_points.append(ind_sorted[i])
 
+            #now make the start, end points
+            splitting_points.sort() #sort the pixels into ascending order
+            region_pixels = []
+            regions = []
+
+            for i in range(forced_number_regions):
+                start = splitting_points[i]
+                end = splitting_points[i+1]
+                region_pixels.append([start,end]) #save the pixel numbers
+                regions.append([wavelength_array[start], wavelength_array[end]]) #save the wavelengths
+
+            """
+            starts = splitting_points[0:forced_number_regions]
+            ends = splitting_points[1:forced_number_regions+1]
+            region_pixels = [starts, ends] #not the right dimensions! (2 x n vs n x 2) 
+            """
+
+
 
 
 
