@@ -964,7 +964,7 @@ def fit_spectrum(spectrum_file, line, voigt=False, chi_limit=1.5, out_folder=Non
     if out_folder:
         name = spectrum_file.split('/', -1)[-1]
         name = name[:name.find('.')] #returns e.g. "spectrum_17" (without any folder, or .h5 extension)
-        base_output_filename = output_folder + name
+        base_output_filename = out_folder + name
         if args.voigt == True:
             base_output_filename += '_voigt_'
         else:

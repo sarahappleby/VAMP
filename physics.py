@@ -37,7 +37,10 @@ def EquivalentWidth(taus, edges):
     Returns:
         Equivalent width in units of the edges.
     """
-    return np.sum(1 - np.exp(-1*taus)) * np.abs((edges[-1] - edges[0]))
+    #return np.sum(1 - np.exp(-1*taus)) * np.abs((edges[-1] - edges[0]))  
+    # integrate the flux decrement  * the spacing between bins (NOT the total range spanned by the bins)
+    return np.sum(1 - np.exp(-1*taus)) * (np.abs(edges[-1] - edges[0]) / (len(edges) - 1)) 
+
 
 def ErrorB(std_s, line):
     """
