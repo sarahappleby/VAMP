@@ -974,15 +974,7 @@ def fit_spectrum(spectrum_file, line, voigt=False, chi_limit=1.5, out_folder=Non
         write_file(params, base_output_filename + 'params.h5', 'h5')
         write_file(flux_model, base_output_filename + 'flux_model.h5', 'h5')
 
-    """
-    print("len(N) in params: " + str(len(params['N'])))
-    print("len(centers) in params: " + str(len(params['centers'])))
-    print("len(region_numbers) in params: " + str(len(params['region_numbers'])))
-    print("len(centers) in flux_model: " + str(len(flux_model['centers'])))
-    print("len(region_numbers) in flux_model: " + str(len(flux_model['region_numbers'])))
-    """
-    #return params, flux_model
-
+    return name
 
 def plot_spectrum(wavelength_array, flux_data, flux_model, regions, folder):
     """
@@ -1117,13 +1109,13 @@ if __name__ == "__main__":
                         default=1, type=int)
     parser.add_argument('--conv_attempts',
                         help='Number of attempts at mcmc chain convergence',
-                        default=5, type=int)
+                        default=6, type=int)
 
-    parser.add_argument()
     args = parser.parse_args()
     num_procs = args.parallel
 
     convergence_attempts = args.conv_attempts
+    chi_limit = 1.5 #TODO: take this as a parameter
 
     if (num_procs == 1):
         #single spectra processing
@@ -1157,7 +1149,7 @@ if __name__ == "__main__":
 
         spectra_to_fit = []
         for f in os.listdir(spectra_folder):
-            if f.endswith(".h5"):
+            if (f.startswith("spectrum_") and f.endswith(".h5")): #TODO: find a way of more flexibly specifying the "spectrum_" condition 
                 file_path = spectra_folder + f
                 spectra_to_fit.append(file_path)
 
@@ -1171,16 +1163,24 @@ if __name__ == "__main__":
         #Make a pool of processes to handle these files
         maxtaskperchild = 5 #the number of tasks a process can perform, before exiting (and then re-spawning - point here is to clean up things)
 
-        pool = mp.Pool(processes=num_procs,maxtasksperchild=maxtaskperchild) #make a pool with the specified settings
+        #print("Number of CPUs available from mp.cpu_count(): " + str(mp.cpu_count()))
+        pool = mp.Pool(processes=num_procs, maxtasksperchild=maxtaskperchild) #make a pool with the specified settings
+
+        #ACTUALLY RUN THE THING
+        results = [pool.apply_async(fit_spectrum,args=(spectra, args.line, args.voigt, chi_limit, output_folder, convergence_attempts)) for spectra in spectra_to_fit ]
+        #results = [pool.apply(fit_spectrum,args=(spectra, args.line, args.voigt, output_folder, convergence_attempts)) for spectra in spectra_to_fit ]
+        #pool.apply_async(fit_spectrum,args=(spectra, args.line, args.voigt, output_folder, convergence_attempts)) for spectra in spectra_to_fit 
+        pool.close()
+        pool.join()
+
+        """
         for spectra in spectra_to_fit:
             #params, flux_model =
             # ACTUALLY RUN THE THING
-            pool.apply(fit_spectrum,args=(spectra, args.line, voigt=args.voigt, out_folder=output_folder, convergence_attempts=convergence_attempts))
-            """
-            params, flux_model = pool.apply(fit_spectrum, args=(wavelength, noise, flux, args.line, 
-                                                                voigt=args.voigt, folder=args.output_folder,
-                                                                convergence_attempts=convergence_attempts,))      
-            """
+            #pool.apply(fit_spectrum,args=(spectra, args.line, voigt=args.voigt, out_folder=output_folder, convergence_attempts=convergence_attempts))
+            #pool.apply(fit_spectrum,args=(spectra, args.line, args.voigt, output_folder, convergence_attempts))
+            pool.apply_async(fit_spectrum,args=(spectra, args.line, args.voigt, output_folder, convergence_attempts))
+        """
         # results = [pool.apply(cube, args=(x,)) for x in range(1, 7)]
         # print(results)
     else:
