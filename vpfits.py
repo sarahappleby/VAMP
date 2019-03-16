@@ -723,7 +723,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
             #TODO: split the regions up
             #TODO: find some handling for (a) damped absorbers (b) spectra which need flux to be rescaled
             forced_number_regions = n // ideal_single_region_components
-
+            print("trying to force-split into " + str(forced_number_regions) + " regions.")
             #TODO: turn this index gathering into a function? just in case it needs to be repeated
             ind = np.argpartition(fluxes, 10*forced_number_regions)[-10*forced_number_regions:]
             ind_sorted = np.flip(ind[np.argsort(fluxes[ind])], axis=0) #indicies sorted from highest flux to lowest flux
@@ -759,12 +759,13 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
                     if dist_is_fine: #if the region would be large enough, then split along this point
                         splitting_points.append(ind_sorted[i])
 
+            print("Have managed to split into " + str(len(splitting_points)-1) + " regions!")
             #now make the start, end points
             splitting_points.sort() #sort the pixels into ascending order
             region_pixels = []
             regions = []
 
-            for i in range(forced_number_regions):
+            for i in range(len(splitting_points)+1):
                 start = splitting_points[i]
                 end = splitting_points[i+1]
                 region_pixels.append([start,end]) #save the pixel numbers
