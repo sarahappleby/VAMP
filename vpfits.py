@@ -1115,7 +1115,9 @@ if __name__ == "__main__":
     num_procs = args.parallel
 
     convergence_attempts = args.conv_attempts
-    chi_limit = 1.5 #TODO: take this as a parameter
+    chi_limit = 1.5 #TODO: take these as parameters
+    mcmc_cov = False
+    get_mcmc_err = True
 
     if (num_procs == 1):
         #single spectra processing
@@ -1167,7 +1169,9 @@ if __name__ == "__main__":
         pool = mp.Pool(processes=num_procs, maxtasksperchild=maxtaskperchild) #make a pool with the specified settings
 
         #ACTUALLY RUN THE THING
-        results = [pool.apply_async(fit_spectrum,args=(spectra, args.line, args.voigt, chi_limit, output_folder, convergence_attempts)) for spectra in spectra_to_fit ]
+        #spectrum_file, line, voigt = False, chi_limit = 1.5, out_folder = None, mcmc_cov = False, get_mcmc_err = True, convergence_attempts = 10
+        results = [pool.apply_async(fit_spectrum,args=(spectra, args.line, args.voigt, chi_limit, output_folder,
+                                        mcmc_cov, get_mcmc_err, convergence_attempts)) for spectra in spectra_to_fit ]
         #results = [pool.apply(fit_spectrum,args=(spectra, args.line, args.voigt, output_folder, convergence_attempts)) for spectra in spectra_to_fit ]
         #pool.apply_async(fit_spectrum,args=(spectra, args.line, args.voigt, output_folder, convergence_attempts)) for spectra in spectra_to_fit 
         pool.close()
