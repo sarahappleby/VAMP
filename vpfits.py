@@ -703,13 +703,15 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
     regions, region_pixels = compute_detection_regions(wavelength_array, 
                             flux_array, noise_array, min_region_width=2)
 
+    #this should be declared after the number of regions is finalized
+    """
     params = {'b': np.array([]), 'b_std': np.array([]), 'N': np.array([]), 'N_std': np.array([]), 
                 'EW': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([])}
 
     flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)), 'region_pixels': region_pixels,
                 'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([]),
                 'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([])}
-    
+    """
 
     max_single_region_components = 15
     ideal_single_region_components = 5
@@ -725,13 +727,16 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
             forced_number_regions = n // ideal_single_region_components
             print("trying to force-split into " + str(forced_number_regions) + " regions.")
             #TODO: turn this index gathering into a function? just in case it needs to be repeated
-            ind = np.argpartition(fluxes, 10*forced_number_regions)[-10*forced_number_regions:]
+            ind = np.argpartition(fluxes, -10*forced_number_regions)[-10*forced_number_regions:]
             ind_sorted = np.flip(ind[np.argsort(fluxes[ind])], axis=0) #indicies sorted from highest flux to lowest flux
+            print(str(len(ind_sorted)) + " possible split points to choose from")
 
             #don't let regions be less than X% (5%?) of the spectrum
             num_pixels = len(fluxes)
-            min_region_percentage = 5
-            min_region_size = num_pixels / min_region_percentage
+            print("There are: " + str(num_pixels) + " pixels.")
+            min_region_percentage = 2
+            min_region_size = num_pixels * (min_region_percentage / 100.0)
+            print("Minimum region pixels: " + str(min_region_size))
 
 
             #new_starts = [start]
@@ -765,7 +770,7 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
             region_pixels = []
             regions = []
 
-            for i in range(len(splitting_points)+1):
+            for i in range(len(splitting_points)-1):
                 start = splitting_points[i]
                 end = splitting_points[i+1]
                 region_pixels.append([start,end]) #save the pixel numbers
@@ -777,7 +782,13 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
             region_pixels = [starts, ends] #not the right dimensions! (2 x n vs n x 2) 
             """
 
+    # dicts to store results
+    params = {'b': np.array([]), 'b_std': np.array([]), 'N': np.array([]), 'N_std': np.array([]),
+                'EW': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([])}
 
+    flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)), 'region_pixels': region_pixels,
+                'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([]),
+                'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([])}
 
 
 
@@ -1088,7 +1099,7 @@ if __name__ == "__main__":
     noise = np.array(data['noise'][:])
     flux = np.array(data['flux'][:])
 
-    convergence_attempts = 10 #TODO: set this in some configuration file
+    convergence_attempts = 5 #TODO: set this in some configuration file
 
     params, flux_model = fit_spectrum(wavelength, noise, flux, args.line, voigt=args.voigt, folder=args.output_folder,
                                       convergence_attempts=convergence_attempts)
