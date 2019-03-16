@@ -484,8 +484,7 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=2,
         noise (numpy array): noise value at each wavelength 
         min_region_width (int): minimum width of a detection region (pixels)
         N_sigma (float): detection threshold (std deviations)
-        tau_lim(float): minimum optical depth of a detection region
-        extend (boolean): default is False. Option to extend detected regions untill tau 
+        extend (boolean): default is False. Option to extend detected regions untill tau
                         returns to continuum.
 
     Returns:
@@ -578,6 +577,7 @@ def compute_detection_regions(wavelengths, fluxes, noise, min_region_width=2,
     for i in range(len(regions_expanded)):
         start = regions_expanded[i][0]
         end = regions_expanded[i][1]
+        #TODO: this part seems to merge regions if they overlap - try printing this out to see if it can be modified to not merge regions?
         if i<(len(regions_expanded)-1) and end > regions_expanded[i+1][0]:
             end = regions_expanded[i+1][1]
         for j in range(start, end):
@@ -667,7 +667,8 @@ def region_fit(frequency_array, flux_array, n, noise_array, freedom, voigt=False
 
 
 
-def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, chi_limit=1.5, folder=None, mcmc_cov=False, get_mcmc_err=True):
+def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, chi_limit=1.5, folder=None,
+                 mcmc_cov=False, get_mcmc_err=True, convergence_attempts=10):
     """
     The main function. Takes an input spectrum, splits it into manageable regions, and fits 
     the individual regions using PyMC. Finally calculates the Doppler parameter b, the 
@@ -694,8 +695,9 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
     chi_sq_maximum = 10 #the maximum "acceptable" chi-squared value before the line adder forcer kicks in
 
     frequency_array = Wave2freq(wavelength_array)
-    flux_floor = 1e-6
-    flux_array = flux_array.clip(min=flux_floor) #set all negative fluxes to some very small value
+    #TODO: see if I actually need this? doesn't appear so, since I don't see anywhere that flux --> optical depth?
+    #flux_floor = 1e-6
+    #flux_array = flux_array.clip(min=flux_floor) #set all negative fluxes to some very small value
 
     # identify regions to fit in the spectrum
     regions, region_pixels = compute_detection_regions(wavelength_array, 
@@ -708,8 +710,59 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
                 'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([]),
                 'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([])}
     
-    j = 0
 
+    max_single_region_components = 15
+    ideal_single_region_components = 5
+    if (len(regions) == 1):
+        start = region_pixels[0][0]
+        end = region_pixels[0][1]
+        fluxes = np.flip(flux_array[start:end], 0)
+        n = estimate_n(fluxes)
+        if (n > max_single_region_components):
+            print(str(n) + " components should be in more than 1 region!")
+            #TODO: split the regions up
+            #TODO: find some handling for (a) damped absorbers (b) spectra which need flux to be rescaled
+            forced_number_regions = n // ideal_single_region_components
+
+            #TODO: turn this index gathering into a function? just in case it needs to be repeated
+            ind = np.argpartition(fluxes, 10*forced_number_regions)[-10*forced_number_regions:]
+            ind_sorted = np.flip(ind[np.argsort(fluxes[ind])], axis=0) #indicies sorted from highest flux to lowest flux
+
+            #don't let regions be less than X% (5%?) of the spectrum
+            num_pixels = len(fluxes)
+            min_region_percentage = 5
+            min_region_size = num_pixels / min_region_percentage
+
+
+            #new_starts = [start]
+            #new_ends = []
+            splitting_points = [start, end]
+            # original "start" is the beginning of the 1st region
+            # original "end" is the end of the last region
+            # each region will be contiguous, so need (forced_number_regions - 1) indexes
+            # these indexes will have to be at least <min_region_size> away from each other.
+
+            for i in range(len(ind_sorted)):
+                # go through indices of maximum flux, in descending order
+                # see if they can be the required distance away from each other.
+                # if they can't be made to work, try working down the list of maximum fluxes
+                if (len(splitting_points) == (forced_number_regions+1)):
+                    break #stop once enough points to split have been found
+                else:
+                    dist_is_fine = True
+                    for j in range(len(splitting_points)):
+                        # check the distance between a possible "splitting point" and the existing splitting points
+                        dist = abs(ind_sorted[i] - splitting_points[j])
+                        if (dist < min_region_size):
+                            dist_is_fine = False
+
+                    if dist_is_fine: #if the region would be large enough, then split along this point
+                        splitting_points.append(ind_sorted[i])
+
+
+
+
+    j = 0
     for start, end in region_pixels:
         fluxes = np.flip(flux_array[start:end], 0)
         noise = np.flip(noise_array[start:end], 0)
@@ -717,12 +770,12 @@ def fit_spectrum(wavelength_array, noise_array, flux_array, line, voigt=False, c
         nu = np.flip(frequency_array[start:end], 0)
 
 
-        best_chi_squared = -1 #initial  ize best_chi_sq
+        best_chi_squared = -1 #initialize best_chi_sq
 
         #track the chi-squared values and associated number of components, to force-add components if necessary
         attempt_n = []
         attempt_chi_squareds = []
-        for _ in range(10):
+        for _ in range(convergence_attempts):
 
             # make initial guess for number of lines in a region
             n = estimate_n(fluxes)
@@ -1016,8 +1069,10 @@ if __name__ == "__main__":
     noise = np.array(data['noise'][:])
     flux = np.array(data['flux'][:])
 
+    convergence_attempts = 10 #TODO: set this in some configuration file
 
-    params, flux_model = fit_spectrum(wavelength, noise, flux, args.line, voigt=args.voigt, folder=args.output_folder)
+    params, flux_model = fit_spectrum(wavelength, noise, flux, args.line, voigt=args.voigt, folder=args.output_folder,
+                                      convergence_attempts=convergence_attempts)
     write_file(params, args.output_folder+'params.h5', 'h5')
     write_file(flux_model, args.output_folder+'flux_model.h5', 'h5')
 
