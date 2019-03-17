@@ -26,7 +26,7 @@ def DopplerParameter(sigma, line):
     line *= 1.e-10
     return (line*sigma*2.355 / np.sqrt(2))*1.e-3 #multiply by 2.355 to convert from std. dev. to FWHM
 
-def EquivalentWidth(taus, edges):
+def EquivalentWidthTau(taus, edges):
     """
     Find the equivalent width of a line/region.
     
@@ -39,7 +39,23 @@ def EquivalentWidth(taus, edges):
     """
     #return np.sum(1 - np.exp(-1*taus)) * np.abs((edges[-1] - edges[0]))  
     # integrate the flux decrement  * the spacing between bins (NOT the total range spanned by the bins)
-    return np.sum(1 - np.exp(-1*taus)) * (np.abs(edges[-1] - edges[0]) / (len(edges) - 1)) 
+    return np.sum(1 - np.exp(-1*taus)) * (np.abs(edges[-1] - edges[0]) / (len(edges) - 1))
+
+
+def EquivalentWidthFlux(fluxes, edges):
+    """
+    Find the equivalent width of a line/region.
+
+    Args:
+        taus (numpy array): the optical depths.
+        edges (list): the edges of the regions, in either frequency or
+        wavelength space.
+    Returns:
+        Equivalent width in units of the edges.
+    """
+    # integrate the flux decrement  * the spacing between bins (NOT the total range spanned by the bins)
+    delta_lambda = (np.abs(edges[-1] - edges[0])) / (len(edges) - 1)
+    return np.sum((1 - fluxes) * delta_lambda)
 
 
 def ErrorB(std_s, line):

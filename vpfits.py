@@ -790,7 +790,8 @@ def fit_spectrum(spectrum_file, line, voigt=False, chi_limit=1.5, out_folder=Non
 
     flux_model = {'total': np.ones(len(flux_array)), 'chi_squared': np.zeros(len(regions)), 'region_pixels': region_pixels,
                 'amplitude': np.array([]), 'sigmas': np.array([]), 'centers': np.array([]), 'region_numbers': np.array([]),
-                'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]), 'cov_as': np.array([]), 'difficult_fit': difficult_fit}
+                'EW': np.zeros(len(regions)), 'std_a': np.array([]), 'std_s': np.array([]), 'std_c': np.array([]),
+                'cov_as': np.array([]), 'difficult_fit': difficult_fit}
 
 
 
@@ -897,6 +898,10 @@ def fit_spectrum(spectrum_file, line, voigt=False, chi_limit=1.5, out_folder=Non
         for k in range(n):
             flux_model['region_'+str(j)+'_flux'][k] = np.flip(Tau2flux(fit.estimated_profiles[k].value), 0)
 
+
+        flux_model['EW'] = EquivalentWidthFlux(edges=flux_model['region_'+str(j)+'_wave'],
+                                               fluxes=flux_model['region_'+str(j)+'_flux'])
+
         heights = np.array([fit.estimated_variables[i]['amplitude'].value for i in range(n)])
         centers = np.array([Freq2wave(fit.estimated_variables[i]['centroid'].value) for i in range(n)])
         #region_numbers = np.array(j for i in range(n)
@@ -957,7 +962,7 @@ def fit_spectrum(spectrum_file, line, voigt=False, chi_limit=1.5, out_folder=Non
         params['centers'] = np.append(params['centers'], centers)
         params['region_numbers'] = np.append(params['region_numbers'], region_numbers)
         for k in range(n):
-            params['EW'] = np.append(params['EW'], EquivalentWidth(fit.estimated_profiles[k].value, [waves[0], waves[-1]]))
+            params['EW'] = np.append(params['EW'], EquivalentWidthTau(fit.estimated_profiles[k].value, [waves[0], waves[-1]]))
         
         j += 1
 
