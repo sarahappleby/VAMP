@@ -899,7 +899,7 @@ def fit_spectrum(spectrum_file, line, voigt=False, chi_limit=1.5, out_folder=Non
             flux_model['region_'+str(j)+'_flux'][k] = np.flip(Tau2flux(fit.estimated_profiles[k].value), 0)
 
 
-        flux_model['EW'] = EquivalentWidthFlux(edges=flux_model['region_'+str(j)+'_wave'],
+        flux_model['EW'][j] = EquivalentWidthFlux(edges=flux_model['region_'+str(j)+'_wave'],
                                                fluxes=flux_model['region_'+str(j)+'_flux'])
 
         heights = np.array([fit.estimated_variables[i]['amplitude'].value for i in range(n)])
