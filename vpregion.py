@@ -89,3 +89,56 @@ class VPregion():
                     continue
         gc.collect()
         self.fit = vpfit_old
+
+
+    def fit_region_pygadds(start, end, wavelength, flux, noise, voigt=False, BIC_factor=1.1,
+            chi_limit=2.5, ntries=5, iterations=3000, thin=15, burn=300):
+        """
+        Fit a region with Gaussian/Voigt profiles using PyMC.
+        Returns instance of VPfit() that contains all the fitted line information.
+
+        Args:
+            start, end: starting and ending pixel numbers for given region
+            wavelength (numpy array)
+            flux (numpy array)
+            noise (numpy array)
+            voigt (Boolean): switch to fit as Voigt profiles or Gaussians
+            BIC_factor (float): factor by which BIC must be lowered in order to accept the new fit
+            chi_limit (float): limit for satisfactory reduced chi squared
+            ntries (int): max number of trials with a given number of lines before adding new line
+            iterations, thin, burn (int): MCMC parameters
+        """
+
+        # initialise chisq loop
+        chisq = np.inf
+        tries = ntries
+        frequency = np.flip(physics.c.in_units_of('Angstrom s**-1')/wavelength[start:end],0)  # we fit in frequency space
+        n = estimate_n(flux)
+        # Add lines until we get a reasonable chi-square
+        while chisq > chi_limit:
+            vpfit = VPfit()
+            vpfit.find_bic(frequency, flux[start:end], n, noise[start:end], voigt=voigt, iterations=iterations, burn=burn)
+            chisq = np.average(vpfit.red_chi_array)
+            if chisq > chi_limit:   
+                if tries > 0: tries -= 1  # keep trying, with same number of lines
+                else: 
+                    n += 1  # ok, give up and add a line
+                    tries = ntries
+        if environment.verbose >= environment.VERBOSE_NORMAL:
+            print "VAMP : Found %d lines, giving chisq=%g."%(n,chisq),
+
+        # Try adding lines so long as each new line lowers chisq and also lowers the BIC by more BIC_factor
+        vpfit_old = copy(vpfit)
+        if BIC_factor is not None:
+            vpfit.find_bic(frequency, flux[start:end], n+1, noise[start:end], voigt=voigt, iterations=iterations, burn=burn)
+            while np.average(vpfit.red_chi_array) < np.average(vpfit_old.red_chi_array) and np.average(vpfit.bic_array) < BIC_factor*np.average(vpfit_old.bic_array):
+                n += 1
+                if environment.verbose >= environment.VERBOSE_NORMAL:
+                    print " Adding line %d: BIC=%g -> %g, chisq=%g -> %g."%(n,np.average(vpfit_old.bic_array),np.average(vpfit.bic_array),np.average(vpfit_old.red_chi_array),np.average(vpfit.red_chi_array)),
+                vpfit_old = copy(vpfit)  # accept the new line and try to add another
+                vpfit.find_bic(frequency, flux[start:end], n+1, noise[start:end], voigt=voigt, iterations=iterations, burn=burn)
+
+        # We have the final fit
+        if environment.verbose >= environment.VERBOSE_NORMAL:
+            print " Fitted %d lines: BIC=%g, chisq=%g"%(n,np.average(vpfit_old.bic_array),np.average(vpfit_old.red_chi_array))
+        return vpfit_old,vpfit_old.red_chi_array[0]
