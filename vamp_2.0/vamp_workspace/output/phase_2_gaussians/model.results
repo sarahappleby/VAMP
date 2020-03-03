@@ -1,0 +1,43 @@
+Bayesian Evidence                                                                         -21525.97916252
+Maximum Likelihood                                                                        -21469.88634760
+
+Most Likely Model:
+
+gaussians
+    gaussian_0
+        center                                                                            0.800
+        intensity                                                                         0.912
+        sigma                                                                             1.949
+    gaussian_1
+        center                                                                            -4.227
+        intensity                                                                         1.120
+        sigma                                                                             15.220
+
+
+Most probable model (3.0 sigma limits):
+
+gaussians
+    gaussian_0
+        center                                                                            0.800 (0.798, 0.801)
+        intensity                                                                         0.912 (0.912, 0.913)
+        sigma                                                                             1.951 (1.944, 1.956)
+    gaussian_1
+        center                                                                            -4.233 (-4.322, -4.160)
+        intensity                                                                         1.120 (1.119, 1.121)
+        sigma                                                                             15.194 (15.043, 15.361)
+
+
+Most probable model (1.0 sigma limits):
+
+gaussians
+    gaussian_0
+        center                                                                            0.800 (0.799, 0.800)
+        intensity                                                                         0.912 (0.912, 0.912)
+        sigma                                                                             1.951 (1.949, 1.953)
+    gaussian_1
+        center                                                                            -4.233 (-4.258, -4.205)
+        intensity                                                                         1.120 (1.120, 1.121)
+        sigma                                                                             15.194 (15.134, 15.248)
+
+instances
+
