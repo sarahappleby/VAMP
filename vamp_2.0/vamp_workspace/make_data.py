@@ -18,7 +18,7 @@ class FakeData():
         self.noise = np.random.normal(0.0, 1.0 / self.snr, self.n_points)
 
 class FakeGauss(FakeData):
-    def __init__(self, center=0.0, intensity=1.0, sigma=1.0, x_min=-5.0, x_max=5.0, n_points=100, snr=50,):
+    def __init__(self, center=0.0, intensity=1.0, sigma=1.0, x_min=-5.0, x_max=5.0, n_points=100, snr=30,):
 
         super(FakeGauss, self).__init__(center=center, intensity=intensity, x_min=x_min, x_max=x_max, n_points=n_points, snr=snr)
         self.sigma = sigma
@@ -31,7 +31,7 @@ class FakeGauss(FakeData):
         self.noisy_gauss = self.gauss + self.noise
 
 class FakeVoigt(FakeData):
-    def __init__(self, center=0.0, intensity=1.0, fwhm_L=1.0, fwhm_G=1.0, x_min=-5.0, x_max=5.0, n_points = 100, snr=50):
+    def __init__(self, center=0.0, intensity=1.0, fwhm_L=1.0, fwhm_G=1.0, x_min=-5.0, x_max=5.0, n_points = 100, snr=30):
 
         super(FakeVoigt, self).__init__(center=center, intensity=intensity, x_min=x_min, x_max=x_max, n_points=n_points, snr=snr)
         self.fwhm_L = fwhm_L
