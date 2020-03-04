@@ -3,7 +3,7 @@ import numpy as np
 
 class DatasetFit:
     # noinspection PyUnresolvedReferences
-    def __init__(self, data, noise_map, model_data):
+    def __init__(self, data, noise_map, model_data, dimensions):
         """Class to fit simulator where the dataset structures are any dimension.
         Parameters
         -----------
@@ -13,6 +13,8 @@ class DatasetFit:
             The noise_map-map of the observed simulator.
         model_data : ndarray
             The model simulate the fitting image is fitted with.
+        dimensions : int
+            The number of parameters in the model
         Attributes
         -----------
         residual_map : ndarray
@@ -32,6 +34,7 @@ class DatasetFit:
         self.data = data
         self.noise_map = noise_map
         self.model_data = model_data
+        self.dimensions = dimensions
 
     @property
     def residual_map(self):
@@ -64,7 +67,7 @@ class DatasetFit:
 
     @property
     def reduced_chi_squared(self):
-        return self.chi_squared / int(np.size(self.mask) - np.sum(self.mask))
+        return self.chi_squared / int(len(self.data) - self.dimensions)
 
     @property
     def noise_normalization(self):
