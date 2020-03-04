@@ -2,6 +2,7 @@ import autofit as af
 from vamp_src.dataset.spectrum import Spectrum
 from vamp_src.fit.fit import DatasetFit
 from vamp_src.phase import visualizer 
+import numpy as np
 
 
 class Analysis(af.Analysis):
@@ -22,10 +23,10 @@ class Analysis(af.Analysis):
         return sum(
             list(
                 map(
-                    lambda gaussian: gaussian.model_from_frequencies(
+                    lambda profile: profile.model_from_frequencies(
                         self.dataset.frequency
                     ),
-                    instance.gaussians,
+                    instance.profiles,
                 )
             )
         )
@@ -37,10 +38,26 @@ class Analysis(af.Analysis):
             model_data=model_spectrum,
         )
 
+    def get_dof(self, instance):
+        return len(self.dataset.flux) - 'dimensionality' 
+
+    def get_reduced_chi_squared(self, instance):
+        #dof = self.get_dof(instance=instance)
+        dof = 4
+        fit = self.model_spectrum_from_instance(instance=instance)
+
+        deviations = (self.dataset.flux - fit)**2.
+        chi_squared = np.sum(deviations / (self.dataset.noise**2.))
+        return chi_squared / dof
+
     def visualize(self, instance, during_analysis):
 
         # Visualization will be covered in tutorial 4.
 
         fit = self.model_spectrum_from_instance(instance=instance)
-        n_components = len(instance.gaussians)
-        self.visualizer.visualize_fit(fit=fit, n_components=n_components, during_analysis=during_analysis)
+        n_components = len(instance.profiles)
+        reduced_chi_squared = self.get_reduced_chi_squared(instance=instance)
+
+        self.visualizer.visualize_fit(fit=fit, n_components=n_components, 
+                                      reduced_chi_squared=reduced_chi_squared, 
+                                      during_analysis=during_analysis)

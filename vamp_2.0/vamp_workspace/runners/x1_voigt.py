@@ -1,18 +1,17 @@
 import autofit as af
 import os
+import matplotlib.pyplot as plt
 
 import sys
 sys.path.append('/disk2/sapple/VAMP/vamp_2.0')
-from vamp_src.model import profiles
+from vamp_src.model import profile_models
 from vamp_src.dataset.spectrum import Spectrum
 import vamp_src.phase.phase as ph
 
-# TODO : Relative path makes our life easier.
-
-# Setup the path to the autolens_workspace, using a relative directory name.
+# Setup the path to the vamp_workspace, using a relative directory name.
 workspace_path = "{}/../".format(os.path.dirname(os.path.realpath(__file__)))
 
-# Setup the path to the config folder, using the autolens_workspace path.
+# Setup the path to the config folder, using the vamp_workspace path.
 config_path = workspace_path + "config"
 
 # Use this path to explicitly set the config path and output path.
@@ -20,23 +19,18 @@ af.conf.instance = af.conf.Config(
     config_path=config_path, output_path=workspace_path + "output"
 )
 
-from vamp_workspace.make_data import FakeGauss
+from vamp_workspace.make_data import FakeVoigt
 
-fakeGaussA = FakeGauss(center=-1.0, sigma=2.0, intensity=0.5)
-fakeGaussB = FakeGauss(center=1.5, sigma=1.0, intensity=1.0)
+fakeVoigt = FakeVoigt()
 
-fakeGauss_2comp = fakeGaussB.gauss + fakeGaussA.gauss + fakeGaussA.noise
-dataset = Spectrum(fakeGaussA.x, fakeGaussA.x, 1.0 - fakeGauss_2comp, fakeGaussA.noise)
+phase = ph.Phase(phase_name="phase_x1_voigt",
+                 profiles=af.CollectionPriorModel(voigt_0=profile_models.Voigt))
 
-phase = ph.Phase(
-    phase_name="phase_x2_gaussians",
-    gaussians=af.CollectionPriorModel(
-        gaussian_0=profiles.Gaussian, gaussian_1=profiles.Gaussian
-    ),
+dataset = Spectrum(
+    fakeVoigt.x, fakeVoigt.x, 1.0 - fakeVoigt.noisy_voigt, fakeVoigt.noise
 )
+
 result = phase.run(dataset=dataset)
-
-
 
 # We also have an 'output' attribute, which in this case is a MultiNestOutput object:
 print(result.output)
@@ -50,11 +44,5 @@ print()
 print("Most Probable Model:\n")
 print("Centre = ", [i.center for i in mp_instance.profiles])
 print("Intensity = ", [i.intensity for i in mp_instance.profiles])
-print("Sigma = ", [i.sigma for i in mp_instance.profiles])
-
-# dataset_filename = '/disk2/sapple/VAMP/data/simple_gauss.h5'
-# with h5py.File(dataset_filename, 'r') as f:
-# 	waves = f['waves'][:]
-# 	nu = f['nu'][:]
-# 	flux = f['flux'][:]
-# 	noise = f['noise'][:]
+print("FHWM Gaussian = ", [i.fwhm_G for i in mp_instance.profiles])
+print("FHWM Lorentzian = ", [i.fwhm_L for i in mp_instance.profiles])

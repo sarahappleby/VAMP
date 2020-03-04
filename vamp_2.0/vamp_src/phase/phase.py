@@ -2,20 +2,20 @@ import autofit as af
 from vamp_src.dataset.spectrum import Spectrum
 from vamp_src.phase.analysis import Analysis
 from vamp_src.phase.result import Result
-from vamp_src.model import profiles
+from vamp_src.model import profile_models
 import numpy as np
 
 class Phase(af.AbstractPhase):
 
-    gaussians = af.PhaseProperty("gaussians")
+    profiles = af.PhaseProperty("profiles")
 
     Result = Result
 
     @af.convert_paths
-    def __init__(self, paths, gaussians, optimizer_class=af.MultiNest):
+    def __init__(self, paths, profiles, optimizer_class=af.MultiNest):
 
         super().__init__(paths=paths, optimizer_class=optimizer_class)
-        self.gaussians = gaussians
+        self.profiles = profiles
 
     def run(self, dataset: Spectrum):
         """
@@ -67,36 +67,36 @@ def make_gaussian_phase(n_components):
     if n_components == 1:
         return Phase(
             phase_name="phase_1_gaussians",
-            gaussians=af.CollectionPriorModel(gaussian_0=profiles.Gaussian)
+            profiles=af.CollectionPriorModel(gaussian_0=profile_models.Gaussian)
             )
 
     elif n_components == 2:
         return Phase(
             phase_name="phase_2_gaussians",
-            gaussians=af.CollectionPriorModel(gaussian_0=profiles.Gaussian, gaussian_1=profiles.Gaussian)
+            profiles=af.CollectionPriorModel(gaussian_0=profile_models.Gaussian, gaussian_1=profile_models.Gaussian)
             )
     elif n_components == 3:
         return Phase(
             phase_name="phase_3_gaussians",
-            gaussians=af.CollectionPriorModel(gaussian_0=profiles.Gaussian, gaussian_1=profiles.Gaussian, gaussian_2=profiles.Gaussian)
+            profiles=af.CollectionPriorModel(gaussian_0=profile_models.Gaussian, gaussian_1=profile_models.Gaussian, gaussian_2=profile_models.Gaussian)
             )
     elif n_components == 4:
         return Phase(
             phase_name="phase_4_gaussians",
-            gaussians=af.CollectionPriorModel(gaussian_0=profiles.Gaussian, gaussian_1=profiles.Gaussian, gaussian_2=profiles.Gaussian, 
-                                              gaussian_3=profiles.Gaussian)
+            profiles=af.CollectionPriorModel(gaussian_0=profile_models.Gaussian, gaussian_1=profile_models.Gaussian, gaussian_2=profile_models.Gaussian, 
+                                              gaussian_3=profile_models.Gaussian)
             )
     elif n_components == 5:
         return Phase(
             phase_name="phase_5_gaussians",
-            gaussians=af.CollectionPriorModel(gaussian_0=profiles.Gaussian, gaussian_1=profiles.Gaussian, gaussian_2=profiles.Gaussian, 
-                                              gaussian_3=profiles.Gaussian, gaussian_4=profiles.Gaussian)
+            profiles=af.CollectionPriorModel(gaussian_0=profile_models.Gaussian, gaussian_1=profile_models.Gaussian, gaussian_2=profile_models.Gaussian, 
+                                              gaussian_3=profile_models.Gaussian, gaussian_4=profile_models.Gaussian)
             )
 
 def make_voigt_phase():
     return ph.Phase(
                     phase_name='phase_1_voigt', 
-                    voigt=af.CollectionPriorModel(voigt_0=profiles.Voigt)
+                    profiles=af.CollectionPriorModel(voigt_0=profile_models.Voigt)
                     )
 
 def make_phase(mode, n_components):

@@ -49,4 +49,4 @@ class Voigt(Profile):
             fwhm_L=self.fwhm_L,
             fwhm_G=self.fwhm_G,
         )
-        return v(frequencies)
+        return 1. - v(frequencies)
