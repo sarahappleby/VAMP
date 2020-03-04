@@ -53,7 +53,7 @@ class Phase(af.AbstractPhase):
             An analysis object that the non-linear search calls to determine the fit likelihood for a given model
             instance.
         """
-        return Analysis(dataset=dataset)
+        return Analysis(dataset=dataset, visualize_path=self.optimizer.paths.image_path)
 
     def make_result(self, result, analysis):
         return self.Result(

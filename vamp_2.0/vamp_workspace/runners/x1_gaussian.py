@@ -36,3 +36,17 @@ result = phase.run(dataset=dataset)
 plt.plot(dataset.frequency, result.most_likely_model_spectrum)
 plt.plot(dataset.frequency, dataset.flux)
 plt.show()
+
+# We also have an 'output' attribute, which in this case is a MultiNestOutput object:
+print(result.output)
+# This object acts as an interface between the MultiNest output results on your hard-disk and this Python code. For
+# example, we can use it to get the evidence estimated by MultiNest.
+print(result.output.evidence)
+# We can also use it to get a model-instance of the "most probable" model, which is the model where each parameter is
+# the value estimated from the probability distribution of parameter space.
+mp_instance = result.output.most_probable_instance
+print()
+print("Most Probable Model:\n")
+print("Centre = ", mp_instance.gaussian.center)
+print("Intensity = ", mp_instance.gaussian.intensity)
+print("Sigma = ", mp_instance.gaussian.sigma)

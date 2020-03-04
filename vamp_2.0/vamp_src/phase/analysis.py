@@ -1,12 +1,17 @@
 import autofit as af
 from vamp_src.dataset.spectrum import Spectrum
 from vamp_src.fit.fit import DatasetFit
+from vamp_src.phase import visualizer 
 
 
 class Analysis(af.Analysis):
-    def __init__(self, dataset: Spectrum):
+    def __init__(self, dataset: Spectrum, visualize_path=None):
 
         self.dataset = dataset
+
+        self.visualizer = visualizer.Visualizer(
+            dataset=self.dataset, visualize_path=visualize_path
+        )
 
     def fit(self, instance):
         model_spectrum = self.model_spectrum_from_instance(instance=instance)
@@ -36,4 +41,6 @@ class Analysis(af.Analysis):
 
         # Visualization will be covered in tutorial 4.
 
-        pass
+        fit = self.model_spectrum_from_instance(instance=instance)
+        n_components = len(instance.gaussians)
+        self.visualizer.visualize_fit(fit=fit, n_components=n_components, during_analysis=during_analysis)

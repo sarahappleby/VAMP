@@ -1,9 +1,0 @@
-gaussians
-    gaussian_0
-        center                                                                            UniformPrior, lower_limit = -10.0, upper_limit = 10.0
-        intensity                                                                         UniformPrior, lower_limit = 0.0, upper_limit = 10.0
-        sigma                                                                             UniformPrior, lower_limit = 0.0, upper_limit = 20.0
-    gaussian_1
-        center                                                                            UniformPrior, lower_limit = -10.0, upper_limit = 10.0
-        intensity                                                                         UniformPrior, lower_limit = 0.0, upper_limit = 10.0
-        sigma                                                                             UniformPrior, lower_limit = 0.0, upper_limit = 20.0

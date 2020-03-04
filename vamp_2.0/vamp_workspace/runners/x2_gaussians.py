@@ -2,7 +2,7 @@ import autofit as af
 import os
 
 import sys
-sys.path.append('/disk2/sapple/VAMP/vamp')
+sys.path.append('/disk2/sapple/VAMP/vamp_2.0')
 from vamp_src.model import profiles
 from vamp_src.dataset.spectrum import Spectrum
 import vamp_src.phase.phase as ph
@@ -36,6 +36,8 @@ phase = ph.Phase(
 )
 result = phase.run(dataset=dataset)
 
+
+
 # We also have an 'output' attribute, which in this case is a MultiNestOutput object:
 print(result.output)
 # This object acts as an interface between the MultiNest output results on your hard-disk and this Python code. For
@@ -46,9 +48,9 @@ print(result.output.evidence)
 mp_instance = result.output.most_probable_instance
 print()
 print("Most Probable Model:\n")
-print("Centre = ", mp_instance.gaussians.center)
-print("Intensity = ", mp_instance.gaussians.intensity)
-print("Sigma = ", mp_instance.gaussians.sigma)
+print("Centre = ", [i.center for i in mp_instance.gaussians])
+print("Intensity = ", [i.intensity for i in mp_instance.gaussians])
+print("Sigma = ", [i.sigma for i in mp_instance.gaussians])
 
 # dataset_filename = '/disk2/sapple/VAMP/data/simple_gauss.h5'
 # with h5py.File(dataset_filename, 'r') as f:
