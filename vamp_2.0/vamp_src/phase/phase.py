@@ -12,9 +12,9 @@ class Phase(af.AbstractPhase):
     Result = Result
 
     @af.convert_paths
-    def __init__(self, paths, profiles, optimizer_class=af.MultiNest):
+    def __init__(self, paths, profiles, non_linear_class=af.MultiNest):
 
-        super().__init__(paths=paths, optimizer_class=optimizer_class)
+        super().__init__(paths=paths, non_linear_class=non_linear_class)
         self.profiles = profiles
 
     def run(self, dataset: Spectrum):
