@@ -1,8 +1,8 @@
 import autofit as af
 import os
-
 import sys
 sys.path.append('/disk2/sapple/VAMP/vamp_2.0')
+import matplotlib.pyplot as plt
 from vamp_src.model import profile_models
 from vamp_src.dataset.spectrum import Spectrum
 import vamp_src.phase.phase as ph
@@ -36,7 +36,9 @@ phase = ph.Phase(
 )
 result = phase.run(dataset=dataset)
 
-
+plt.plot(dataset.frequency, result.most_likely_model_spectrum)
+plt.plot(dataset.frequency, dataset.flux)
+plt.show()
 
 # We also have an 'output' attribute, which in this case is a MultiNestOutput object:
 print(result.output)
@@ -51,10 +53,3 @@ print("Most Probable Model:\n")
 print("Centre = ", [i.center for i in mp_instance.profiles])
 print("Intensity = ", [i.intensity for i in mp_instance.profiles])
 print("Sigma = ", [i.sigma for i in mp_instance.profiles])
-
-# dataset_filename = '/disk2/sapple/VAMP/data/simple_gauss.h5'
-# with h5py.File(dataset_filename, 'r') as f:
-# 	waves = f['waves'][:]
-# 	nu = f['nu'][:]
-# 	flux = f['flux'][:]
-# 	noise = f['noise'][:]
