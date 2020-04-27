@@ -30,7 +30,7 @@ dataset = Spectrum(fakeGaussA.x, fakeGaussA.x, 1.0 - fakeGauss_2comp, fakeGaussA
 
 phase = ph.Phase(
     phase_name="phase_x2_gaussians",
-    gaussians=af.CollectionPriorModel(
+    profiles=af.CollectionPriorModel(
         gaussian_0=profile_models.Gaussian, gaussian_1=profile_models.Gaussian
     ),
 )

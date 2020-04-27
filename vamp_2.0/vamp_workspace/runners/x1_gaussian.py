@@ -26,7 +26,7 @@ from vamp_workspace.make_data import FakeGauss
 fakeGauss = FakeGauss()
 
 phase = ph.Phase(phase_name="phase_x1_gaussians",
-                 gaussians=af.CollectionPriorModel(gaussian_0=profile_models.Gaussian))
+                 profiles=af.CollectionPriorModel(gaussian_0=profile_models.Gaussian))
 
 dataset = Spectrum(
     fakeGauss.x, fakeGauss.x, 1.0 - fakeGauss.noisy_gauss, fakeGauss.noise
