@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 import sys
 sys.path.append('/disk2/sapple/VAMP/vamp')
-from vamp_src.model import profiles
+from vamp_src.model import profile_models
 from vamp_src.dataset.spectrum import Spectrum
 import vamp_src.phase.phase as ph
 

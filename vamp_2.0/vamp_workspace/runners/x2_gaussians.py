@@ -3,7 +3,7 @@ import os
 
 import sys
 sys.path.append('/disk2/sapple/VAMP/vamp_2.0')
-from vamp_src.model import profiles
+from vamp_src.model import profile_models
 from vamp_src.dataset.spectrum import Spectrum
 import vamp_src.phase.phase as ph
 
