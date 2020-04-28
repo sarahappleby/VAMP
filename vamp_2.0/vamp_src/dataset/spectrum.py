@@ -19,3 +19,21 @@ class Spectrum:
         if n < 4:
             n = 1
             return n
+
+    def save_as_h5py(self, filename):
+        
+        with h5py.File(filename, 'a') as f:
+            f.create_dataset('wavelength', data=np.array(self.wavelength))
+            f.create_dataset('frequency', data=np.array(self.frequency))
+            f.create_dataset('flux', data=np.array(self.flux))
+            f.create_dataset('noise', data=np.array(self.noise))
+
+def read_from_h5py(filename):
+
+    with h5py.File(filename, 'r') as f:
+        wavelength = f['wavelength'][:]
+        frequency = f['frequency'][:]
+        flux = f['flux'][:]
+        noise = f['noise'][:]
+
+    return Spectrum(frequency, wavelength, flux, noise)
