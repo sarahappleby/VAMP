@@ -32,6 +32,7 @@ class Spectrum:
         plt.plot(self.wavelength, self.flux, c='k')
         plt.xlabel('Wavelength')
         plt.ylabel('Flux')
+        plt.ylim(-0.1, 1.1)
         plt.savefig(filename)
         plt.clf()
 
