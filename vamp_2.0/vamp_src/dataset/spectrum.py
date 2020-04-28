@@ -14,19 +14,27 @@ class Spectrum:
       return Spectrum(self.frequency[i_start:i_end], self.wavelength[i_start:i_end], 
                       self.flux[i_start:i_end], self.noise[i_start:i_end])
 
-    def estimate_n(self):
-        n = int(argrelextrema(gaussian_filter(self.flux, 3), np.less)[0].shape[0])
-        if n < 4:
-            n = 1
-            return n
-
-    def save_as_h5py(self, filename):
-        
+    def save_as_h5py(self, filename, attributes=None):
+        import h5py
         with h5py.File(filename, 'a') as f:
+            
             f.create_dataset('wavelength', data=np.array(self.wavelength))
             f.create_dataset('frequency', data=np.array(self.frequency))
             f.create_dataset('flux', data=np.array(self.flux))
             f.create_dataset('noise', data=np.array(self.noise))
+
+            if attributes:
+                for k in list(attributes.keys()):
+                    f[k] = attributes[k]
+
+    def plot_spectrum(self, filename):
+        import matplotlib.pyplot as plt
+        plt.plot(self.wavelength, self.flux, c='k')
+        plt.xlabel('Wavelength')
+        plt.ylabel('Flux')
+        plt.savefig(filename)
+        plt.clf()
+
 
 def read_from_h5py(filename):
 

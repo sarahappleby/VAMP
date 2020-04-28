@@ -36,6 +36,12 @@ class SplitRegions():
 
 		self.compute_detection_regions()
 
+	def estimate_n(self):
+		n = int(argrelextrema(gaussian_filter(self.dataset.flux, 3), np.less)[0].shape[0])
+		if n < 4:
+			n = 1
+			return n
+
 	def convolve_varying_gaussians(self):
 		# Convolve varying-width Gaussians with equivalent width of flux and noise
 		# to get initial estimate for detection ratio
