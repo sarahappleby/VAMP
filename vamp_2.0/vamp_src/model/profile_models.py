@@ -20,8 +20,6 @@ class Gaussian(Profile):
     def __init__(self, center=0.0, intensity=0.1, sigma=0.01):
 
         super(Gaussian, self).__init__(center=center, intensity=intensity)
-        #    self.center = center # Delete this, the super method passes center 'up' such that all Pofiles have a centre
-        #    self.intensity = intensity # The same happens with the intensity.
         self.sigma = sigma
 
     def model_from_frequencies(self, frequencies):
@@ -31,12 +29,10 @@ class Gaussian(Profile):
 
 
 class Voigt(Profile):
+    
     def __init__(self, center=0.0, intensity=0.1, fwhm_L=0.01, fwhm_G=0.01):
 
         super(Voigt, self).__init__(center=center, intensity=intensity)
-
-        # TODO : You should rename these to all lower case and a more readable and dsecriptive name,
-        # TODO : e.g. fwhm_L -> full_width_half_max_lower
 
         self.fwhm_L = fwhm_L
         self.fwhm_G = fwhm_G
