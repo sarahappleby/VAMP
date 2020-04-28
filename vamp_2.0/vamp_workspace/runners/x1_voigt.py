@@ -21,7 +21,7 @@ af.conf.instance = af.conf.Config(
 
 from vamp_workspace.make_data import FakeVoigt
 
-fakeVoigt = FakeVoigt()
+fakeVoigt = FakeVoigt(center=-1.0, intensity=0.5, fwhm_L=1.0, fwhm_G=2.0)
 
 phase = ph.Phase(phase_name="phase_x1_voigt",
                  profiles=af.CollectionPriorModel(voigt_0=profile_models.Voigt))

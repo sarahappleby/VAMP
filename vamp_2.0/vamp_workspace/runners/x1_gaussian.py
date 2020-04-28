@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 
 import sys
-sys.path.append('/disk2/sapple/VAMP/vamp')
+sys.path.append('/disk2/sapple/VAMP/vamp_2.0')
 from vamp_src.model import profile_models
 from vamp_src.dataset.spectrum import Spectrum
 import vamp_src.phase.phase as ph
@@ -23,7 +23,7 @@ af.conf.instance = af.conf.Config(
 
 from vamp_workspace.make_data import FakeGauss
 
-fakeGauss = FakeGauss()
+fakeGauss = FakeGauss(center=-1.0, sigma=2.0, intensity=0.5)
 
 phase = ph.Phase(phase_name="phase_x1_gaussians",
                  profiles=af.CollectionPriorModel(gaussian_0=profile_models.Gaussian))
