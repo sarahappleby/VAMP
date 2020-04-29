@@ -125,6 +125,15 @@ class SplitRegions():
 
 		print('Found {} detection regions.'.format(len(self.region_pixels)))
 
+	def new_region_spectra(self):
+		new_spectra = []
+		for reg in self.region_pixels:
+			new_spectra.append(Spectrum(self.dataset.frequency[reg[0]:reg[1]], 
+										self.dataset.wavelength[reg[0]:reg[1]],
+										self.dataset.flux[reg[0]:reg[1]],
+										self.dataset.noise[reg[0]:reg[1]]))
+		return new_spectra
+
 	def plot_with_regions():
 		# make plot with brackets indicating the selected regions
 		pass
