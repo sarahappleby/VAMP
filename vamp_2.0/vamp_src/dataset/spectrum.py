@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 from scipy.signal import argrelextrema
+import h5py
 
 class Spectrum:
     def __init__(self, frequency, wavelength, flux, noise):
@@ -15,7 +16,7 @@ class Spectrum:
                       self.flux[i_start:i_end], self.noise[i_start:i_end])
 
     def save_as_h5py(self, filename, attributes=None):
-        import h5py
+
         with h5py.File(filename, 'a') as f:
             
             f.create_dataset('wavelength', data=np.array(self.wavelength))

@@ -13,6 +13,7 @@ class Visualizer(): # do i need the abstract class?
 		plt.legend(loc=3)
 		plt.xlabel('Frequency')
 		plt.ylabel('Flux')
+		plt.ylim(-0.1, 1.1)
 		plt.title('reduced Chi squared: %.2f' % round(reduced_chi_squared, 2))
 		plt.savefig(self.visualize_path + 'fit.png')
 		plt.clf()

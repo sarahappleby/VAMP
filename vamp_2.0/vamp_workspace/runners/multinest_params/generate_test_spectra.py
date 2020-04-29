@@ -20,7 +20,7 @@ spectrum_dir = '/home/sarah/VAMP/vamp_2.0/vamp_workspace/runners/multinest_param
 centers_a = [1., 1., 2., -2., 0.]
 centers_b = [0., -2., -1., 3., -3.]
 centers_c = [-2., 3., -3., 0., 2.]
-sigmas_a = [1.0, 1.0, 2.0, 0.5, 0.5]
+sigmas_a = [1.0, 1.0, 2.0, 0.5, 1.0]
 sigmas_b = [0.5, 2.0, 0.5, 0.5, 1.5]
 sigmas_c = [2.0, 3.0, 1.0, 0.5, 2.0]
 intensity_a = [0.5, 0.3, 0.5, 0.6, 0.4]
@@ -28,6 +28,18 @@ intensity_b = [0.8, 0.5, 0.4, 0.7, 1.0]
 intensity_c = [0.3, 0.5, 0.7, 0.6, 0.7]
 
 combos = ['a', 'b', 'c', 'd', 'e']
+
+centers_a = [0.]
+centers_b = [-3.]
+centers_c = [2.]
+sigmas_a = [1.0]
+sigmas_b = [1.5]
+sigmas_c = [2.0]
+intensity_a = [0.4]
+intensity_b = [1.0]
+intensity_c = [0.7]
+
+combos = ['e']
 
 for i, combo in enumerate(combos):
 
